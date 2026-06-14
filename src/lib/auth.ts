@@ -4,7 +4,7 @@ import bcrypt from 'bcryptjs'
 import type { NextAuthOptions } from 'next-auth'
 import type { Role } from '@/types'
 
-const HAS_DB = !!"placeholder"
+const HAS_DB = Boolean(process.env.DATABASE_URL)
 
 export const authOptions: NextAuthOptions = {
   providers: [
@@ -46,5 +46,5 @@ export const authOptions: NextAuthOptions = {
   },
   pages: { signIn: '/login' },
   session: { strategy: 'jwt' },
-  secret: "placeholder",
+  secret: process.env.NEXTAUTH_SECRET,
 }

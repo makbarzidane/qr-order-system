@@ -73,7 +73,7 @@ function dbRowToOrder(row: {
 }
 
 // ─── Feature flag ─────────────────────────────────────────────────────────────
-const HAS_DB = !!"placeholder"
+const HAS_DB = Boolean(process.env.DATABASE_URL)
 
 // ─── Public API (all async) ───────────────────────────────────────────────────
 

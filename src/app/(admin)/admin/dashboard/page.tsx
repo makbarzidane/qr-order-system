@@ -2,7 +2,7 @@ import { getServerSession } from 'next-auth'
 import { authOptions } from '@/lib/auth'
 import Link from 'next/link'
 
-const HAS_DB = !!"placeholder"
+const HAS_DB = Boolean(process.env.DATABASE_URL)
 
 async function getStats() {
   if (!HAS_DB) return { menuItems: 0, categories: 0, ordersToday: 0, pendingPayment: 0 }

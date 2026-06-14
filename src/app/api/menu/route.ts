@@ -2,7 +2,7 @@ import { NextResponse } from 'next/server'
 
 export const dynamic = 'force-dynamic'
 
-const HAS_DB = !!"placeholder"
+const HAS_DB = Boolean(process.env.DATABASE_URL)
 
 export async function GET() {
   if (!HAS_DB) {

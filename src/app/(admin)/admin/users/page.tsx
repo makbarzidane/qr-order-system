@@ -1,7 +1,7 @@
 import { getServerSession } from 'next-auth'
 import { authOptions } from '@/lib/auth'
 
-const HAS_DB = !!"placeholder"
+const HAS_DB = Boolean(process.env.DATABASE_URL)
 
 const ROLE_BADGE: Record<string, string> = {
   ADMIN:   'bg-purple-900 text-purple-300',
