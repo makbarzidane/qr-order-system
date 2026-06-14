@@ -1,5 +1,6 @@
 import type { Metadata } from 'next'
 import './globals.css'
+import { SessionProviderWrapper } from '@/components/SessionProviderWrapper'
 
 export const metadata: Metadata = {
   title: 'QR Order System',
@@ -13,7 +14,9 @@ export default function RootLayout({
 }) {
   return (
     <html lang="id">
-      <body>{children}</body>
+      <body>
+        <SessionProviderWrapper>{children}</SessionProviderWrapper>
+      </body>
     </html>
   )
 }
