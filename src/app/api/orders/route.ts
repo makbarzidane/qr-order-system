@@ -7,7 +7,8 @@ export const dynamic = 'force-dynamic'
 export async function GET(req: NextRequest) {
   const { searchParams } = new URL(req.url)
   const paidOnly = searchParams.get('paid') === 'true'
-  const orders = await getAllOrders(paidOnly)
+  const statusFilter = searchParams.get('status') ?? undefined
+  const orders = await getAllOrders(paidOnly, statusFilter)
   return NextResponse.json(orders)
 }
 
