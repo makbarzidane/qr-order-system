@@ -6,7 +6,7 @@ Sistem pemesanan digital berbasis QR Code untuk cafe dan restoran. Customer scan
 
 ---
 
-## Fitur Phase 1 (saat ini)
+## Fitur Phase 1 
 
 - Menu digital per meja (scan QR)
 - Keranjang belanja dengan persistensi localStorage
