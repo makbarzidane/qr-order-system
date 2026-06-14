@@ -1,5 +1,4 @@
-import { Role } from './index'
-import { DefaultSession } from 'next-auth'
+import type { Role } from './index'
 
 declare module 'next-auth' {
   interface User {
@@ -8,7 +7,10 @@ declare module 'next-auth' {
   interface Session {
     user: {
       role: Role
-    } & DefaultSession['user']
+      name?: string | null
+      email?: string | null
+      image?: string | null
+    }
   }
 }
 
