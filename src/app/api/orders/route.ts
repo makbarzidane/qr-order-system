@@ -2,14 +2,12 @@ import { NextRequest, NextResponse } from 'next/server'
 import { createOrder, getAllOrders } from '@/lib/order-store'
 import { CartItem, PaymentMethod } from '@/types'
 
+export const dynamic = 'force-dynamic'
+
 export async function GET(req: NextRequest) {
   const { searchParams } = new URL(req.url)
   const paidOnly = searchParams.get('paid') === 'true'
-  const orders = getAllOrders().filter((o) =>
-    paidOnly ? o.paymentStatus === 'PAID' : true
-  )
-  // newest first
-  orders.sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime())
+  const orders = await getAllOrders(paidOnly)
   return NextResponse.json(orders)
 }
 
@@ -26,39 +24,30 @@ export async function POST(req: NextRequest) {
     const { customerName, tableId, paymentMethod, items } = body
 
     if (!customerName?.trim()) {
-      return NextResponse.json(
-        { error: 'Nama pelanggan wajib diisi.' },
-        { status: 400 }
-      )
+      return NextResponse.json({ error: 'Nama pelanggan wajib diisi.' }, { status: 400 })
     }
     if (!items || items.length === 0) {
-      return NextResponse.json(
-        { error: 'Cart tidak boleh kosong.' },
-        { status: 400 }
-      )
+      return NextResponse.json({ error: 'Cart tidak boleh kosong.' }, { status: 400 })
     }
     if (!paymentMethod) {
-      return NextResponse.json(
-        { error: 'Metode pembayaran wajib dipilih.' },
-        { status: 400 }
-      )
+      return NextResponse.json({ error: 'Metode pembayaran wajib dipilih.' }, { status: 400 })
     }
 
-    const orderItems = items.map((ci) => ({
-      id: `item-${Date.now()}-${Math.random().toString(36).slice(2, 5)}`,
+    const orderItems = items.map((ci, idx) => ({
+      id: `item-${Date.now()}-${idx}`,
       menuItemId: ci.menuItem.id,
       nameSnapshot: ci.menuItem.name,
       priceSnapshot: ci.menuItem.price,
       quantity: ci.quantity,
-      note: ci.note,
+      note: ci.note || '',
       lineTotal: ci.menuItem.price * ci.quantity,
     }))
 
     const subtotal = orderItems.reduce((s, i) => s + i.lineTotal, 0)
 
-    const order = createOrder({
+    const order = await createOrder({
       customerName: customerName.trim(),
-      tableId: tableId || 'unknown',
+      tableId: tableId || '',
       paymentMethod,
       items: orderItems,
       subtotal,
