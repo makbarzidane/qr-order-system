@@ -1,11 +1,9 @@
 /**
- * Order store — Phase 1.5
+ * Order store — Phase 2
  *
  * Strategy:
  *   · DATABASE_URL set  → use Prisma (PostgreSQL). Persistent across Vercel lambdas.
  *   · No DATABASE_URL   → fall back to module-level Map (in-memory, resets on cold start).
- *
- * Switch: just add DATABASE_URL to Vercel env vars and redeploy.
  */
 import { Order, OrderItem, PaymentMethod } from '@/types'
 
@@ -75,7 +73,7 @@ function dbRowToOrder(row: {
 }
 
 // ─── Feature flag ─────────────────────────────────────────────────────────────
-const HAS_DB = !!process.env.DATABASE_URL
+const HAS_DB = !!"placeholder"
 
 // ─── Public API (all async) ───────────────────────────────────────────────────
 
@@ -133,11 +131,14 @@ export async function getOrder(id: string): Promise<Order | null> {
   return memOrders.get(id) ?? null
 }
 
-export async function getAllOrders(paidOnly = false): Promise<Order[]> {
+export async function getAllOrders(paidOnly = false, statusFilter?: string): Promise<Order[]> {
   if (HAS_DB) {
     const { prisma } = await import('./prisma')
+    const where: Record<string, unknown> = {}
+    if (paidOnly) where.paymentStatus = 'PAID'
+    if (statusFilter) where.status = statusFilter
     const rows = await prisma.order.findMany({
-      where: paidOnly ? { paymentStatus: 'PAID' } : undefined,
+      where: Object.keys(where).length ? where : undefined,
       orderBy: { createdAt: 'desc' },
     })
     return rows.map(dbRowToOrder)
@@ -145,6 +146,7 @@ export async function getAllOrders(paidOnly = false): Promise<Order[]> {
 
   let orders = Array.from(memOrders.values())
   if (paidOnly) orders = orders.filter((o) => o.paymentStatus === 'PAID')
+  if (statusFilter) orders = orders.filter((o) => o.status === statusFilter)
   return orders.sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime())
 }
 
@@ -169,7 +171,7 @@ export async function confirmPayment(id: string): Promise<Order> {
       where: { id },
       data: {
         paymentStatus: 'PAID',
-        status: 'PAID',
+        status: 'QUEUED',
         queueNumber: counter.counter,
         paidAt: new Date(),
       },
@@ -185,7 +187,7 @@ export async function confirmPayment(id: string): Promise<Order> {
   const updated: Order = {
     ...order,
     paymentStatus: 'PAID',
-    status: 'PAID',
+    status: 'QUEUED',
     queueNumber,
     paidAt: new Date().toISOString(),
   }
@@ -197,7 +199,7 @@ export async function updateKitchenStatus(
   id: string,
   status: Order['status']
 ): Promise<Order> {
-  const allowed: Order['status'][] = ['PAID', 'IN_PROGRESS', 'READY', 'DONE']
+  const allowed: Order['status'][] = ['QUEUED', 'PREPARING', 'READY', 'COMPLETED']
   if (!allowed.includes(status)) throw new Error('Status tidak valid.')
 
   if (HAS_DB) {
