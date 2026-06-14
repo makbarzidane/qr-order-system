@@ -9,10 +9,9 @@ const HAS_DB = !!"placeholder"
 
 async function requireAdmin() {
   const session = await getServerSession(authOptions)
-  if (!session || session.user?.role !== 'ADMIN') throw new Error('Unauthorized')
+  if (!session || (session.user as { role?: string })?.role !== 'ADMIN') throw new Error('Unauthorized')
 }
 
-// Categories
 export async function createCategory(data: { name: string; sortOrder?: number }) {
   await requireAdmin()
   if (!HAS_DB) throw new Error('Database not configured')
@@ -42,17 +41,21 @@ export async function toggleCategoryActive(id: string) {
   return cat
 }
 
-// Menu items
 export async function createMenuItem(data: { name: string; description?: string; price: number; imageEmoji?: string; categoryId: string; isAvailable?: boolean }) {
   await requireAdmin()
   if (!HAS_DB) throw new Error('Database not configured')
-  const item = await prisma.menuItem.create({ data: { ...data, description: data.description ?? '', imageEmoji: data.imageEmoji ?? '🍽️' } })
+  const item = await prisma.menuItem.create({
+    data: { ...data, description: data.description ?? '', imageEmoji: data.imageEmoji ?? '🍽️' },
+  })
   revalidatePath('/admin/menu')
   revalidatePath('/api/menu')
   return item
 }
 
-export async function updateMenuItem(id: string, data: Partial<{ name: string; description: string; price: number; imageEmoji: string; categoryId: string; isAvailable: boolean }>) {
+export async function updateMenuItem(
+  id: string,
+  data: Partial<{ name: string; description: string; price: number; imageEmoji: string; categoryId: string; isAvailable: boolean }>,
+) {
   await requireAdmin()
   if (!HAS_DB) throw new Error('Database not configured')
   const item = await prisma.menuItem.update({ where: { id }, data })
