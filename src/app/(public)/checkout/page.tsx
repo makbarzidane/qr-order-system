@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useRef } from 'react'
 import { useRouter } from 'next/navigation'
 import Link from 'next/link'
 import { useCart } from '@/contexts/CartContext'
@@ -23,25 +23,41 @@ export default function CheckoutPage() {
   const [methodError, setMethodError] = useState('')
   const [isSubmitting, setIsSubmitting] = useState(false)
 
-  // ── Guard: only redirect AFTER localStorage is hydrated ─────────────────────
-  // Doing this in render (the old code) caused immediate redirect because
-  // state.items is empty before useEffect hydration runs.
+  // Track whether we already checked — prevents clearCart() from re-triggering
+  // the guard after items are cleared during successful order submission
+  const guardChecked = useRef(false)
+
+  // Guard: only redirect when cart is ACTUALLY empty (not after we submitted)
+  // useRef ensures this only fires on first hydration, not on every items change
   useEffect(() => {
-    if (!isHydrated) return
+    if (!isHydrated || guardChecked.current) return
+    guardChecked.current = true
     if (state.items.length === 0) {
       router.replace('/cart')
     }
-  }, [isHydrated, state.items.length, router])
+    // DO NOT add state.items.length to deps — we only want to check once on mount
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [isHydrated])
 
-  // ── Loading state ────────────────────────────────────────────────────────────
-  if (!isHydrated || state.items.length === 0) {
+  // Loading / redirect in progress
+  if (!isHydrated || (!guardChecked.current && state.items.length === 0)) {
     return (
       <div className="min-h-screen bg-stone-50 flex items-center justify-center">
         <div className="text-center">
           <p className="text-3xl mb-3">🛒</p>
-          <p className="text-stone-500 text-sm">
-            {isHydrated ? 'Cart kosong. Mengarahkan ke Cart...' : 'Memuat...'}
-          </p>
+          <p className="text-stone-400 text-sm">Memuat...</p>
+        </div>
+      </div>
+    )
+  }
+
+  // Cart actually empty after hydration — will be redirected by useEffect
+  if (isHydrated && guardChecked.current && state.items.length === 0) {
+    return (
+      <div className="min-h-screen bg-stone-50 flex items-center justify-center">
+        <div className="text-center">
+          <p className="text-3xl mb-3">🛒</p>
+          <p className="text-stone-400 text-sm">Cart kosong. Mengarahkan ke Cart...</p>
         </div>
       </div>
     )
@@ -54,7 +70,7 @@ export default function CheckoutPage() {
 
     let valid = true
     if (!customerName.trim()) {
-      setNameError('Nama pelanggan wajib diisi sebelum memilih pembayaran.')
+      setNameError('Nama pelanggan wajib diisi sebelum checkout.')
       valid = false
     }
     if (!paymentMethod) {
@@ -82,7 +98,22 @@ export default function CheckoutPage() {
       }
 
       const order = await res.json()
+
+      // Save orderId to localStorage so status page can recover if needed
+      try {
+        localStorage.setItem('lastOrderId', order.id)
+        localStorage.setItem('lastOrder', JSON.stringify(order))
+      } catch {
+        // ignore
+      }
+
+      // Clear cart FIRST, then navigate — this way the clearCart dispatch
+      // doesn't race with the navigate when both try to update CartContext
       clearCart()
+
+      // Small timeout to let React flush the clearCart state update
+      // before unmounting checkout (prevents guard useEffect re-firing on items change)
+      await new Promise((r) => setTimeout(r, 50))
       router.push(`/order/${order.id}/status`)
     } catch (err: unknown) {
       const msg = err instanceof Error ? err.message : 'Terjadi kesalahan.'
@@ -161,7 +192,7 @@ export default function CheckoutPage() {
                   className={`flex items-center gap-3 p-3 rounded-xl border-2 cursor-pointer transition ${
                     paymentMethod === m.value
                       ? 'border-amber-500 bg-amber-50'
-                      : 'border-stone-100 hover:border-stone-200 active:bg-stone-50'
+                      : 'border-stone-100 hover:border-stone-200'
                   }`}
                 >
                   <input
@@ -197,7 +228,7 @@ export default function CheckoutPage() {
             disabled={isSubmitting}
             className="w-full max-w-md mx-auto block bg-amber-500 hover:bg-amber-600 active:scale-[.98] disabled:opacity-60 text-white text-center py-3 rounded-xl font-bold transition"
           >
-            {isSubmitting ? 'Memproses...' : `Pesan Sekarang — ${formatRupiah(subtotal)}`}
+            {isSubmitting ? '⏳ Memproses...' : `Pesan Sekarang — ${formatRupiah(subtotal)}`}
           </button>
         </div>
       </form>
