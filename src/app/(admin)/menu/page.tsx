@@ -1,5 +1,5 @@
 'use client'
-import { useEffect, useState, useTransition } from 'react'
+import { useEffect, useState } from 'react'
 import { createMenuItem, updateMenuItem, toggleMenuItemAvailable } from '../actions'
 import { formatRupiah } from '@/lib/menu-data'
 
@@ -11,7 +11,7 @@ export default function MenuAdminPage() {
   const [items, setItems] = useState<Item[]>([])
   const [loading, setLoading] = useState(true)
   const [filterCat, setFilterCat] = useState('all')
-  const [isPending, startTransition] = useTransition()
+  const [isPending, setIsPending] = useState(false)
   const [msg, setMsg] = useState('')
   const [err, setErr] = useState('')
   const [editId, setEditId] = useState<string | null>(null)
@@ -37,44 +37,51 @@ export default function MenuAdminPage() {
   async function handleCreate(e: React.FormEvent) {
     e.preventDefault()
     if (!newData.name.trim() || !newData.categoryId) return
-    startTransition(async () => {
-      try {
-        await createMenuItem({
-          name: newData.name.trim(),
-          description: newData.description,
-          price: Number(newData.price) || 0,
-          imageEmoji: newData.imageEmoji || '🍽️',
-          categoryId: newData.categoryId,
-          isAvailable: newData.isAvailable,
-        })
-        setNewData({ name: '', description: '', price: '', imageEmoji: '🍽️', categoryId: '', isAvailable: true })
-        setShowAdd(false)
-        await fetchData()
-        showMsg('Item berhasil ditambahkan!')
-      } catch (error: unknown) {
-        showErr(error instanceof Error ? error.message : 'Gagal menambahkan')
-      }
-    })
+    setIsPending(true)
+    try {
+      await createMenuItem({
+        name: newData.name.trim(),
+        description: newData.description,
+        price: Number(newData.price) || 0,
+        imageEmoji: newData.imageEmoji || '🍽️',
+        categoryId: newData.categoryId,
+        isAvailable: newData.isAvailable,
+      })
+      setNewData({ name: '', description: '', price: '', imageEmoji: '🍽️', categoryId: '', isAvailable: true })
+      setShowAdd(false)
+      await fetchData()
+      showMsg('Item berhasil ditambahkan!')
+    } catch (error: unknown) {
+      showErr(error instanceof Error ? error.message : 'Gagal menambahkan')
+    } finally { setIsPending(false) }
   }
 
   async function handleUpdate(id: string) {
-    startTransition(async () => {
-      try {
-        await updateMenuItem(id, { name: editData.name, description: editData.description, price: typeof editData.price === 'string' ? Number(editData.price) : editData.price, imageEmoji: editData.imageEmoji, categoryId: editData.categoryId })
-        setEditId(null)
-        await fetchData()
-        showMsg('Item diperbarui!')
-      } catch (error: unknown) {
-        showErr(error instanceof Error ? error.message : 'Gagal memperbarui')
-      }
-    })
+    setIsPending(true)
+    try {
+      await updateMenuItem(id, {
+        name: editData.name,
+        description: editData.description,
+        price: typeof editData.price === 'string' ? Number(editData.price) : editData.price,
+        imageEmoji: editData.imageEmoji,
+        categoryId: editData.categoryId,
+      })
+      setEditId(null)
+      await fetchData()
+      showMsg('Item diperbarui!')
+    } catch (error: unknown) {
+      showErr(error instanceof Error ? error.message : 'Gagal memperbarui')
+    } finally { setIsPending(false) }
   }
 
   async function handleToggle(id: string) {
-    startTransition(async () => {
-      try { await toggleMenuItemAvailable(id); await fetchData() }
-      catch (error: unknown) { showErr(error instanceof Error ? error.message : 'Gagal') }
-    })
+    setIsPending(true)
+    try {
+      await toggleMenuItemAvailable(id)
+      await fetchData()
+    } catch (error: unknown) {
+      showErr(error instanceof Error ? error.message : 'Gagal')
+    } finally { setIsPending(false) }
   }
 
   const filtered = filterCat === 'all' ? items : items.filter(i => i.categoryId === filterCat)
@@ -92,7 +99,6 @@ export default function MenuAdminPage() {
       {msg && <div className="mb-4 bg-green-900 text-green-300 border border-green-700 rounded-xl px-4 py-3 text-sm">{msg}</div>}
       {err && <div className="mb-4 bg-red-900 text-red-300 border border-red-700 rounded-xl px-4 py-3 text-sm">{err}</div>}
 
-      {/* Add form */}
       {showAdd && (
         <form onSubmit={handleCreate} className="bg-slate-800 border border-amber-500/30 rounded-xl p-5 mb-6 space-y-3">
           <h2 className="font-semibold text-sm text-amber-400 mb-2">Tambah Item Baru</h2>
@@ -141,7 +147,6 @@ export default function MenuAdminPage() {
         </form>
       )}
 
-      {/* Filter */}
       <div className="flex gap-2 mb-4 flex-wrap">
         <button onClick={() => setFilterCat('all')} className={`px-3 py-1 rounded-full text-xs font-medium transition ${filterCat === 'all' ? 'bg-amber-500 text-white' : 'bg-slate-700 text-slate-300 hover:bg-slate-600'}`}>Semua</button>
         {categories.map(c => (
@@ -149,7 +154,6 @@ export default function MenuAdminPage() {
         ))}
       </div>
 
-      {/* Items list */}
       {loading ? (
         <p className="text-slate-500 text-sm animate-pulse">Memuat...</p>
       ) : filtered.length === 0 ? (
@@ -167,7 +171,7 @@ export default function MenuAdminPage() {
                   <div className="grid grid-cols-2 gap-2">
                     <input value={editData.name ?? ''} onChange={e => setEditData(p => ({...p, name: e.target.value}))}
                       placeholder="Nama" className="bg-slate-900 border border-slate-600 rounded-lg px-3 py-1.5 text-sm text-white focus:outline-none focus:ring-1 focus:ring-amber-500" />
-                    <input value={editData.price ?? ''} onChange={e => setEditData(p => ({...p, price: e.target.value as unknown as number}))}
+                    <input value={editData.price ?? ''} onChange={e => setEditData(p => ({...p, price: Number(e.target.value)}))}
                       type="number" placeholder="Harga" className="bg-slate-900 border border-slate-600 rounded-lg px-3 py-1.5 text-sm text-white focus:outline-none focus:ring-1 focus:ring-amber-500" />
                     <input value={editData.imageEmoji ?? ''} onChange={e => setEditData(p => ({...p, imageEmoji: e.target.value}))}
                       placeholder="Emoji" maxLength={4} className="bg-slate-900 border border-slate-600 rounded-lg px-3 py-1.5 text-sm text-white focus:outline-none focus:ring-1 focus:ring-amber-500" />
