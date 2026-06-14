@@ -1,6 +1,8 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { getOrder, confirmPayment, updateKitchenStatus } from '@/lib/order-store'
 import { Order } from '@/types'
+import { getServerSession } from 'next-auth'
+import { authOptions } from '@/lib/auth'
 
 export const dynamic = 'force-dynamic'
 
@@ -25,10 +27,13 @@ export async function PATCH(
   { params }: { params: { id: string } }
 ) {
   try {
+    const session = await getServerSession(authOptions)
+    if (!session) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
     const body: PatchBody = await req.json()
 
     if (body.action === 'confirm_payment') {
-      const order = await confirmPayment(params.id)
+      if (!['ADMIN', 'CASHIER'].includes(session.user.role)) return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
+      const order = await confirmPayment(params.id, { id: session.user.id, name: session.user.name ?? undefined })
       return NextResponse.json(order)
     }
 
@@ -36,7 +41,8 @@ export async function PATCH(
       if (!body.status) {
         return NextResponse.json({ error: 'Status wajib diisi.' }, { status: 400 })
       }
-      const order = await updateKitchenStatus(params.id, body.status)
+      if (!['ADMIN', 'KITCHEN'].includes(session.user.role)) return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
+      const order = await updateKitchenStatus(params.id, body.status, { id: session.user.id, name: session.user.name ?? undefined })
       return NextResponse.json(order)
     }
 

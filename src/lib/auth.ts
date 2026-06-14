@@ -24,12 +24,10 @@ export const authOptions: NextAuthOptions = {
         if (!credentials?.email || !credentials?.password) return null
         const email = credentials.email.trim().toLowerCase()
         const demo = DEMO_USERS[email]
-
-        if (demo && demo.password === credentials.password) {
-          return { id: email, email, name: demo.name, role: demo.role }
+        if (!HAS_DB) {
+          if (demo && demo.password === credentials.password) return { id: email, email, name: demo.name, role: demo.role }
+          return null
         }
-
-        if (!HAS_DB) return null
 
         const user = await prisma.user.findUnique({ where: { email } })
         if (!user || !user.isActive) return null
@@ -45,7 +43,10 @@ export const authOptions: NextAuthOptions = {
       return token
     },
     async session({ session, token }) {
-      if (session.user) (session.user as { role: Role }).role = token.role as Role
+      if (session.user) {
+        session.user.role = token.role as Role
+        session.user.id = token.sub ?? ''
+      }
       return session
     },
   },

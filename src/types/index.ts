@@ -31,6 +31,8 @@ export interface MenuItem {
   description: string
   price: number
   imageEmoji: string
+  imageUrl?: string | null
+  isActive?: boolean
   isAvailable: boolean
   categoryId: string
   category?: Category | { id: string; name: string; sortOrder: number }
@@ -63,10 +65,15 @@ export interface Order {
   items: OrderItem[]
   subtotal: number
   total: number
+  discountCode?: string
+  discountName?: string
+  discountAmount?: number
   queueNumber?: number
   createdAt: string
   paidAt?: string
 }
+
+export type DiscountType = 'PERCENTAGE' | 'FIXED'
 
 export interface User {
   id: string
