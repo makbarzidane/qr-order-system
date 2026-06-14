@@ -4,25 +4,25 @@ import { useEffect, useState, useCallback } from 'react'
 import { Order } from '@/types'
 import { formatRupiah } from '@/lib/menu-data'
 
-type KitchenStatus = 'PAID' | 'IN_PROGRESS' | 'READY' | 'DONE'
+type KitchenStatus = 'QUEUED' | 'PREPARING' | 'READY' | 'COMPLETED'
 
 const STATUS_CONFIG: Record<string, { bg: string; border: string; text: string; label: string }> = {
-  PAID:        { bg: 'bg-blue-950',   border: 'border-blue-700',  text: 'text-blue-100',   label: 'Baru Masuk' },
-  IN_PROGRESS: { bg: 'bg-yellow-900', border: 'border-yellow-500',text: 'text-yellow-100', label: 'Dimasak' },
-  READY:       { bg: 'bg-green-900',  border: 'border-green-500', text: 'text-green-100',  label: 'Siap Diambil' },
-  DONE:        { bg: 'bg-gray-800',   border: 'border-gray-600',  text: 'text-gray-400',   label: 'Selesai' },
+  QUEUED:    { bg: 'bg-blue-950',   border: 'border-blue-700',   text: 'text-blue-100',   label: 'Antrian Baru' },
+  PREPARING: { bg: 'bg-yellow-900', border: 'border-yellow-500', text: 'text-yellow-100', label: 'Sedang Dimasak' },
+  READY:     { bg: 'bg-green-900',  border: 'border-green-500',  text: 'text-green-100',  label: 'Siap Diambil' },
+  COMPLETED: { bg: 'bg-gray-800',   border: 'border-gray-600',   text: 'text-gray-400',   label: 'Selesai' },
 }
 
 const NEXT_STATUS: Partial<Record<KitchenStatus, KitchenStatus>> = {
-  PAID: 'IN_PROGRESS',
-  IN_PROGRESS: 'READY',
-  READY: 'DONE',
+  QUEUED:    'PREPARING',
+  PREPARING: 'READY',
+  READY:     'COMPLETED',
 }
 
 const NEXT_LABEL: Partial<Record<KitchenStatus, string>> = {
-  PAID: '▶ Mulai Masak',
-  IN_PROGRESS: '✓ Siap Diambil',
-  READY: '✓ Selesai',
+  QUEUED:    '▶ Mulai Masak',
+  PREPARING: '✓ Siap Diambil',
+  READY:     '✓ Selesai',
 }
 
 export default function KitchenDisplayPage() {
@@ -48,7 +48,7 @@ export default function KitchenDisplayPage() {
 
   useEffect(() => {
     fetchOrders()
-    const interval = setInterval(fetchOrders, 4000) // poll every 4s
+    const interval = setInterval(fetchOrders, 4000)
     return () => clearInterval(interval)
   }, [fetchOrders])
 
@@ -66,86 +66,69 @@ export default function KitchenDisplayPage() {
     }
   }
 
-  const activeOrders = orders.filter((o) => o.status !== 'DONE')
-  const doneOrders = orders.filter((o) => o.status === 'DONE')
+  const activeOrders = orders.filter((o) => o.status !== 'COMPLETED')
+  const completedOrders = orders.filter((o) => o.status === 'COMPLETED')
 
   const refreshTime = lastRefresh.toLocaleTimeString('id-ID', {
     timeZone: 'Asia/Jakarta',
-    hour: '2-digit',
-    minute: '2-digit',
-    second: '2-digit',
+    hour: '2-digit', minute: '2-digit', second: '2-digit',
   })
 
   return (
     <div>
-      {/* ── Toolbar ─────────────────────────────────────────────── */}
+      {/* Toolbar */}
       <div className="flex items-center justify-between mb-5">
         <div>
           <div className="flex items-center gap-2">
-            <span className="text-sm font-semibold text-gray-200">
-              {activeOrders.length} order aktif
-            </span>
+            <span className="text-sm font-semibold text-gray-200">{activeOrders.length} order aktif</span>
             <span className="w-2 h-2 rounded-full bg-green-400 animate-pulse" />
           </div>
-          <p className="text-xs text-gray-500 mt-0.5">
-            Refresh setiap 4 detik · terakhir {refreshTime} · #{pollCount}
-          </p>
+          <p className="text-xs text-gray-500 mt-0.5">Refresh setiap 4 detik · terakhir {refreshTime} · #{pollCount}</p>
         </div>
-        <button
-          onClick={fetchOrders}
-          className="bg-gray-700 hover:bg-gray-600 active:scale-95 text-white px-4 py-2 rounded-lg text-sm font-medium transition"
-        >
+        <button onClick={fetchOrders}
+          className="bg-gray-700 hover:bg-gray-600 active:scale-95 text-white px-4 py-2 rounded-lg text-sm font-medium transition">
           🔄 Refresh
         </button>
       </div>
 
-      {/* ── Loading ─────────────────────────────────────────────── */}
+      {/* Loading */}
       {loading && (
         <div className="text-center py-20">
           <p className="text-gray-400 text-sm animate-pulse">Memuat...</p>
         </div>
       )}
 
-      {/* ── Empty state ──────────────────────────────────────────── */}
+      {/* Empty state */}
       {!loading && activeOrders.length === 0 && (
         <div className="text-center py-20 text-gray-500">
           <p className="text-5xl mb-4">🍽️</p>
-          <p className="font-semibold text-gray-300 text-lg mb-2">
-            Belum ada order masuk
-          </p>
+          <p className="font-semibold text-gray-300 text-lg mb-2">Belum ada order masuk</p>
           <p className="text-sm text-gray-500 max-w-sm mx-auto leading-relaxed">
-            Order akan muncul di sini setelah pembayaran dikonfirmasi
-            (status <code className="text-yellow-400 bg-gray-800 px-1 rounded">PAID</code>).
+            Order akan muncul di sini setelah kasir mengkonfirmasi pembayaran (status QUEUED).
           </p>
           <div className="mt-6 bg-gray-800 rounded-xl p-4 inline-block text-left max-w-sm">
             <p className="text-xs text-gray-400 font-semibold mb-2">Cara test demo:</p>
             <ol className="text-xs text-gray-400 space-y-1 list-decimal list-inside">
               <li>Buka <code className="text-blue-400">/menu/meja-1</code> di tab lain</li>
               <li>Pilih item → Checkout</li>
-              <li>Klik <strong className="text-yellow-400">Tandai Sudah Bayar</strong></li>
-              <li>Order akan muncul di halaman ini dalam ~4 detik</li>
+              <li>Konfirmasi pembayaran di <code className="text-blue-400">/cashier</code></li>
+              <li>Order akan muncul di sini dalam ~4 detik</li>
             </ol>
           </div>
         </div>
       )}
 
-      {/* ── Active orders grid ────────────────────────────────────── */}
+      {/* Active orders grid */}
       {!loading && activeOrders.length > 0 && (
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4 mb-8">
           {activeOrders.map((order) => {
-            const cfg = STATUS_CONFIG[order.status] ?? STATUS_CONFIG.PAID
+            const cfg = STATUS_CONFIG[order.status] ?? STATUS_CONFIG.QUEUED
             const next = NEXT_STATUS[order.status as KitchenStatus]
             const nextLabel = NEXT_LABEL[order.status as KitchenStatus]
-            const elapsed = Math.floor(
-              (Date.now() - new Date(order.createdAt).getTime()) / 60000
-            )
+            const elapsed = Math.floor((Date.now() - new Date(order.createdAt).getTime()) / 60000)
 
             return (
-              <div
-                key={order.id}
-                className={`rounded-2xl border-2 overflow-hidden ${cfg.bg} ${cfg.border} ${cfg.text}`}
-              >
-                {/* Card header */}
+              <div key={order.id} className={`rounded-2xl border-2 overflow-hidden ${cfg.bg} ${cfg.border} ${cfg.text}`}>
                 <div className="px-4 pt-4 pb-2 flex items-start justify-between">
                   <div>
                     <p className="text-3xl font-black leading-none">#{order.queueNumber ?? '—'}</p>
@@ -156,8 +139,6 @@ export default function KitchenDisplayPage() {
                     {cfg.label}
                   </span>
                 </div>
-
-                {/* Items */}
                 <div className="px-4 pb-3 mt-1 space-y-1 border-t border-white/10 pt-3">
                   {order.items.map((item) => (
                     <div key={item.id} className="flex justify-between text-sm">
@@ -167,8 +148,6 @@ export default function KitchenDisplayPage() {
                   ))}
                   <p className="text-xs opacity-50 pt-1">{formatRupiah(order.total)}</p>
                 </div>
-
-                {/* Action button */}
                 {next && nextLabel && (
                   <div className="px-4 pb-4">
                     <button
@@ -186,18 +165,13 @@ export default function KitchenDisplayPage() {
         </div>
       )}
 
-      {/* ── Done orders ──────────────────────────────────────────── */}
-      {!loading && doneOrders.length > 0 && (
+      {/* Completed orders */}
+      {!loading && completedOrders.length > 0 && (
         <div>
-          <h2 className="text-gray-600 text-xs font-semibold uppercase tracking-wider mb-3">
-            Selesai hari ini
-          </h2>
+          <h2 className="text-gray-600 text-xs font-semibold uppercase tracking-wider mb-3">Selesai hari ini</h2>
           <div className="grid grid-cols-2 sm:grid-cols-4 lg:grid-cols-6 gap-2">
-            {doneOrders.map((order) => (
-              <div
-                key={order.id}
-                className="bg-gray-800/60 border border-gray-700 rounded-xl p-3 text-center"
-              >
+            {completedOrders.map((order) => (
+              <div key={order.id} className="bg-gray-800/60 border border-gray-700 rounded-xl p-3 text-center">
                 <p className="text-xl font-black text-gray-500">#{order.queueNumber}</p>
                 <p className="text-xs text-gray-600 truncate">{order.customerName}</p>
                 <p className="text-xs text-green-600 font-semibold mt-1">✓ Selesai</p>
