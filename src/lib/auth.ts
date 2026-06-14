@@ -17,7 +17,6 @@ export const authOptions: NextAuthOptions = {
       async authorize(credentials) {
         if (!credentials?.email || !credentials?.password) return null
         if (!HAS_DB) {
-          // Demo fallback (no DB): hardcoded seeded accounts
           const DEMO: Record<string, { password: string; role: Role; name: string }> = {
             'admin@qrorder.app':   { password: 'admin123',   role: 'ADMIN',   name: 'Admin' },
             'cashier@qrorder.app': { password: 'cashier123', role: 'CASHIER', name: 'Kasir' },
