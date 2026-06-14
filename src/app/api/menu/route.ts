@@ -1,5 +1,4 @@
 import { NextResponse } from 'next/server'
-import { prisma } from '@/lib/prisma'
 
 export const dynamic = 'force-dynamic'
 
@@ -10,6 +9,7 @@ export async function GET() {
     return NextResponse.json({ categories: [], items: [], fallback: true })
   }
   try {
+    const { prisma } = await import('@/lib/prisma')
     const [categories, items] = await Promise.all([
       prisma.category.findMany({
         where: { isActive: true },
