@@ -2,11 +2,13 @@ import { NextRequest, NextResponse } from 'next/server'
 import { getOrder, confirmPayment, updateKitchenStatus } from '@/lib/order-store'
 import { Order } from '@/types'
 
+export const dynamic = 'force-dynamic'
+
 export async function GET(
   _req: NextRequest,
   { params }: { params: { id: string } }
 ) {
-  const order = getOrder(params.id)
+  const order = await getOrder(params.id)
   if (!order) {
     return NextResponse.json({ error: 'Order tidak ditemukan.' }, { status: 404 })
   }
@@ -26,7 +28,7 @@ export async function PATCH(
     const body: PatchBody = await req.json()
 
     if (body.action === 'confirm_payment') {
-      const order = confirmPayment(params.id)
+      const order = await confirmPayment(params.id)
       return NextResponse.json(order)
     }
 
@@ -34,7 +36,7 @@ export async function PATCH(
       if (!body.status) {
         return NextResponse.json({ error: 'Status wajib diisi.' }, { status: 400 })
       }
-      const order = updateKitchenStatus(params.id, body.status)
+      const order = await updateKitchenStatus(params.id, body.status)
       return NextResponse.json(order)
     }
 
