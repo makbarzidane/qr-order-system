@@ -7,10 +7,62 @@ datasource db {
   url      = env("DATABASE_URL")
 }
 
-// ─── Phase 1.5: Simplified flat schema ──────────────────────────────────────
-// Items stored as JSON in Order.itemsJson (avoids join complexity for Phase 1.5)
-// Phase 2 will normalize into proper OrderItem table + add Decimal precision
+enum Role {
+  ADMIN
+  CASHIER
+  KITCHEN
+}
 
+model User {
+  id        String   @id @default(cuid())
+  email     String   @unique
+  name      String
+  password  String
+  role      Role     @default(CASHIER)
+  isActive  Boolean  @default(true)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+}
+
+model Category {
+  id        String     @id @default(cuid())
+  name      String
+  sortOrder Int        @default(0)
+  isActive  Boolean    @default(true)
+  items     MenuItem[]
+  createdAt DateTime   @default(now())
+  updatedAt DateTime   @updatedAt
+}
+
+model MenuItem {
+  id          String   @id @default(cuid())
+  name        String
+  description String   @default("")
+  price       Int
+  imageEmoji  String   @default("🍽")
+  isAvailable Boolean  @default(true)
+  categoryId  String
+  category    Category @relation(fields: [categoryId], references: [id])
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  @@index([categoryId])
+  @@index([isAvailable])
+}
+
+model Discount {
+  id        String    @id @default(cuid())
+  name      String
+  type      String
+  value     Int       @default(0)
+  isActive  Boolean   @default(false)
+  startsAt  DateTime?
+  endsAt    DateTime?
+  createdAt DateTime  @default(now())
+}
+
+// Order.status values: PENDING_PAYMENT | QUEUED | PREPARING | READY | COMPLETED | CANCELLED
+// Order.paymentStatus values: UNPAID | PAID | FAILED | EXPIRED | REFUNDED
 model Order {
   id            String    @id
   orderNumber   String    @unique
@@ -19,7 +71,7 @@ model Order {
   status        String    @default("PENDING_PAYMENT")
   paymentStatus String    @default("UNPAID")
   paymentMethod String
-  itemsJson     String    // JSON: OrderItem[]
+  itemsJson     String
   subtotal      Float     @default(0)
   total         Float     @default(0)
   queueNumber   Int?
@@ -32,7 +84,6 @@ model Order {
   @@index([createdAt])
 }
 
-// Daily queue counter — reset every day
 model QueueCounter {
   dateKey String @id
   counter Int    @default(0)
