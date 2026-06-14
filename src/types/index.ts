@@ -1,15 +1,16 @@
 export type PaymentMethod = 'CASH' | 'QRIS' | 'TRANSFER' | 'DEBIT_EDC'
 
-export type OrderStatus =
-  | 'DRAFT'
-  | 'PENDING_PAYMENT'
-  | 'PAID'
-  | 'IN_PROGRESS'
-  | 'READY'
-  | 'DONE'
-  | 'CANCELLED'
+export type Role = 'ADMIN' | 'CASHIER' | 'KITCHEN'
 
-export type PaymentStatus = 'UNPAID' | 'PAID'
+export type PaymentStatus = 'UNPAID' | 'PAID' | 'FAILED' | 'EXPIRED' | 'REFUNDED'
+
+export type OrderStatus =
+  | 'PENDING_PAYMENT'
+  | 'QUEUED'
+  | 'PREPARING'
+  | 'READY'
+  | 'COMPLETED'
+  | 'CANCELLED'
 
 export interface MenuCategory {
   id: string
@@ -17,15 +18,22 @@ export interface MenuCategory {
   sortOrder: number
 }
 
+export interface Category {
+  id: string
+  name: string
+  sortOrder: number
+  isActive: boolean
+}
+
 export interface MenuItem {
   id: string
   name: string
   description: string
   price: number
-  category: string
-  categoryId: string
   imageEmoji: string
   isAvailable: boolean
+  categoryId: string
+  category?: Category | { id: string; name: string; sortOrder: number }
 }
 
 export interface CartItem {
@@ -58,4 +66,12 @@ export interface Order {
   queueNumber?: number
   createdAt: string
   paidAt?: string
+}
+
+export interface User {
+  id: string
+  email: string
+  name: string
+  role: Role
+  isActive: boolean
 }
