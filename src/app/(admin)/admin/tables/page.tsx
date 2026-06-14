@@ -1,0 +1,2 @@
+import { headers } from 'next/headers'; import { prisma } from '@/lib/prisma'; import { TablesManager } from './tables-manager'
+export default async function TablesPage(){const tables=await prisma.cafeTable.findMany({orderBy:{id:'asc'}});const host=headers().get('host')??'localhost:3000';const protocol=host.includes('localhost')?'http':'https';return <TablesManager tables={tables} baseUrl={`${protocol}://${host}`}/>}

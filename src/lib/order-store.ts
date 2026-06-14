@@ -1,47 +1,22 @@
-/**
- * Order store — Phase 1.5
- *
- * Strategy:
- *   · DATABASE_URL set  → use Prisma (PostgreSQL). Persistent across Vercel lambdas.
- *   · No DATABASE_URL   → fall back to module-level Map (in-memory, resets on cold start).
- *
- * Switch: just add DATABASE_URL to Vercel env vars and redeploy.
- */
-import { Order, OrderItem, PaymentMethod } from '@/types'
+import { prisma } from '@/lib/prisma'
+import { MENU_ITEMS } from '@/lib/menu-data'
+import type { Order, OrderItem, PaymentMethod } from '@/types'
 
-// ─── Helpers ─────────────────────────────────────────────────────────────────
-
-export function getTodayKey(): string {
-  return new Date().toISOString().slice(0, 10)
-}
-
-function generateOrderNumber(): string {
-  const now = new Date()
-  const pad = (n: number) => String(n).padStart(2, '0')
-  const date = `${now.getFullYear()}${pad(now.getMonth() + 1)}${pad(now.getDate())}`
-  const rand = Math.floor(Math.random() * 9000) + 1000
-  return `ORD-${date}-${rand}`
-}
-
-function generateId(): string {
-  return `order-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`
-}
-
-// ─── In-memory fallback (no DATABASE_URL) ────────────────────────────────────
-
+const HAS_DB = Boolean(process.env.DATABASE_URL)
+const PAYMENT_METHODS: PaymentMethod[] = ['CASH', 'QRIS', 'TRANSFER', 'DEBIT_EDC']
 const memOrders = new Map<string, Order>()
 const memQueueCounters = new Map<string, number>()
 
-function memNextQueue(): number {
-  const key = getTodayKey()
-  const next = (memQueueCounters.get(key) ?? 0) + 1
-  memQueueCounters.set(key, next)
-  return next
+function todayKey() {
+  return new Intl.DateTimeFormat('en-CA', { timeZone: 'Asia/Jakarta' }).format(new Date())
 }
 
-// ─── Prisma helpers ───────────────────────────────────────────────────────────
+function generateOrderNumber() {
+  const compactDate = todayKey().replaceAll('-', '')
+  return `ORD-${compactDate}-${crypto.randomUUID().slice(0, 6).toUpperCase()}`
+}
 
-function dbRowToOrder(row: {
+function rowToOrder(row: {
   id: string
   orderNumber: string
   customerName: string
@@ -52,9 +27,11 @@ function dbRowToOrder(row: {
   itemsJson: string
   subtotal: number
   total: number
+  discountCode: string | null
+  discountName: string | null
+  discountAmount: number
   queueNumber: number | null
   createdAt: Date
-  updatedAt: Date
   paidAt: Date | null
 }): Order {
   return {
@@ -68,155 +45,193 @@ function dbRowToOrder(row: {
     items: JSON.parse(row.itemsJson) as OrderItem[],
     subtotal: row.subtotal,
     total: row.total,
+    discountCode: row.discountCode ?? undefined,
+    discountName: row.discountName ?? undefined,
+    discountAmount: row.discountAmount,
     queueNumber: row.queueNumber ?? undefined,
     createdAt: row.createdAt.toISOString(),
     paidAt: row.paidAt?.toISOString(),
   }
 }
 
-// ─── Feature flag ─────────────────────────────────────────────────────────────
-const HAS_DB = !!process.env.DATABASE_URL
+async function resolveDiscount(code: string | undefined, subtotal: number) {
+  if (!code?.trim() || !HAS_DB) return { amount: 0 }
+  const normalized = code.trim().toUpperCase()
+  const now = new Date()
+  const discount = await prisma.discount.findFirst({ where: { code: normalized } })
+  if (!discount || !discount.isActive) throw new Error('Kode promo tidak valid atau tidak aktif.')
+  if (discount.startsAt && discount.startsAt > now) throw new Error('Promo belum dimulai.')
+  if (discount.endsAt && discount.endsAt < now) throw new Error('Promo sudah berakhir.')
+  if (subtotal < discount.minPurchase) throw new Error(`Minimal pembelian promo adalah Rp${discount.minPurchase.toLocaleString('id-ID')}.`)
 
-// ─── Public API (all async) ───────────────────────────────────────────────────
+  const raw = discount.type === 'PERCENTAGE'
+    ? Math.floor(subtotal * Math.min(discount.value, 100) / 100)
+    : discount.value
 
-export type CreateOrderInput = Omit<
-  Order,
-  'id' | 'orderNumber' | 'status' | 'paymentStatus' | 'createdAt' | 'queueNumber' | 'paidAt'
->
-
-export async function createOrder(data: CreateOrderInput): Promise<Order> {
-  if (!data.customerName?.trim()) {
-    throw new Error('Nama pelanggan wajib diisi.')
+  return {
+    code: discount.code ?? undefined,
+    name: discount.name,
+    amount: Math.min(Math.max(raw, 0), subtotal),
   }
-
-  const id = generateId()
-  const orderNumber = generateOrderNumber()
-
-  if (HAS_DB) {
-    const { prisma } = await import('./prisma')
-    const row = await prisma.order.create({
-      data: {
-        id,
-        orderNumber,
-        customerName: data.customerName.trim(),
-        tableId: data.tableId || '',
-        status: 'PENDING_PAYMENT',
-        paymentStatus: 'UNPAID',
-        paymentMethod: data.paymentMethod,
-        itemsJson: JSON.stringify(data.items),
-        subtotal: data.subtotal,
-        total: data.total,
-      },
-    })
-    return dbRowToOrder(row)
-  }
-
-  // Fallback: in-memory
-  const order: Order = {
-    ...data,
-    id,
-    orderNumber,
-    status: 'PENDING_PAYMENT',
-    paymentStatus: 'UNPAID',
-    createdAt: new Date().toISOString(),
-  }
-  memOrders.set(id, order)
-  return order
 }
 
-export async function getOrder(id: string): Promise<Order | null> {
-  if (HAS_DB) {
-    const { prisma } = await import('./prisma')
-    const row = await prisma.order.findUnique({ where: { id } })
-    return row ? dbRowToOrder(row) : null
-  }
-  return memOrders.get(id) ?? null
-}
-
-export async function getAllOrders(paidOnly = false): Promise<Order[]> {
-  if (HAS_DB) {
-    const { prisma } = await import('./prisma')
-    const rows = await prisma.order.findMany({
-      where: paidOnly ? { paymentStatus: 'PAID' } : undefined,
-      orderBy: { createdAt: 'desc' },
-    })
-    return rows.map(dbRowToOrder)
+export async function createOrder(input: {
+  customerName: string
+  tableId: string
+  paymentMethod: PaymentMethod
+  items: Array<{ menuItem: { id: string }; quantity: number; note?: string }>
+  discountCode?: string
+}): Promise<Order> {
+  const customerName = input.customerName.trim()
+  if (!customerName) throw new Error('Nama pelanggan wajib diisi.')
+  if (!PAYMENT_METHODS.includes(input.paymentMethod)) throw new Error('Metode pembayaran tidak valid.')
+  if (!input.items.length) throw new Error('Cart tidak boleh kosong.')
+  if (input.items.some((item) => !Number.isInteger(item.quantity) || item.quantity < 1 || item.quantity > 99)) {
+    throw new Error('Jumlah item tidak valid.')
   }
 
-  let orders = Array.from(memOrders.values())
-  if (paidOnly) orders = orders.filter((o) => o.paymentStatus === 'PAID')
-  return orders.sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime())
-}
+  const ids = Array.from(new Set(input.items.map((item) => item.menuItem.id)))
+  const products = HAS_DB
+    ? await prisma.menuItem.findMany({ where: { id: { in: ids }, isActive: true, isAvailable: true, category: { isActive: true } } })
+    : MENU_ITEMS.filter((item) => ids.includes(item.id) && item.isAvailable)
+  const productMap = new Map(products.map((item) => [item.id, item]))
+  if (productMap.size !== ids.length) throw new Error('Ada menu yang sudah tidak tersedia. Silakan perbarui keranjang.')
 
-export async function confirmPayment(id: string): Promise<Order> {
-  if (HAS_DB) {
-    const { prisma } = await import('./prisma')
-
-    // Idempotent: if already PAID, return as-is
-    const existing = await prisma.order.findUnique({ where: { id } })
-    if (!existing) throw new Error('Order tidak ditemukan.')
-    if (existing.paymentStatus === 'PAID') return dbRowToOrder(existing)
-
-    // Get next queue number atomically
-    const dateKey = getTodayKey()
-    const counter = await prisma.queueCounter.upsert({
-      where: { dateKey },
-      update: { counter: { increment: 1 } },
-      create: { dateKey, counter: 1 },
-    })
-
-    const row = await prisma.order.update({
-      where: { id },
-      data: {
-        paymentStatus: 'PAID',
-        status: 'PAID',
-        queueNumber: counter.counter,
-        paidAt: new Date(),
-      },
-    })
-    return dbRowToOrder(row)
-  }
-
-  // Fallback: in-memory
-  const order = memOrders.get(id)
-  if (!order) throw new Error('Order tidak ditemukan.')
-  if (order.paymentStatus === 'PAID') return order
-  const queueNumber = memNextQueue()
-  const updated: Order = {
-    ...order,
-    paymentStatus: 'PAID',
-    status: 'PAID',
-    queueNumber,
-    paidAt: new Date().toISOString(),
-  }
-  memOrders.set(id, updated)
-  return updated
-}
-
-export async function updateKitchenStatus(
-  id: string,
-  status: Order['status']
-): Promise<Order> {
-  const allowed: Order['status'][] = ['PAID', 'IN_PROGRESS', 'READY', 'DONE']
-  if (!allowed.includes(status)) throw new Error('Status tidak valid.')
-
-  if (HAS_DB) {
-    const { prisma } = await import('./prisma')
-    const existing = await prisma.order.findUnique({ where: { id } })
-    if (!existing) throw new Error('Order tidak ditemukan.')
-    if (existing.paymentStatus !== 'PAID') {
-      throw new Error('Order belum PAID. Kitchen tidak boleh memproses order ini.')
+  const items: OrderItem[] = input.items.map((cartItem, index) => {
+    const product = productMap.get(cartItem.menuItem.id)!
+    return {
+      id: `item-${Date.now()}-${index}`,
+      menuItemId: product.id,
+      nameSnapshot: product.name,
+      priceSnapshot: product.price,
+      quantity: cartItem.quantity,
+      note: cartItem.note?.trim() ?? '',
+      lineTotal: product.price * cartItem.quantity,
     }
-    const row = await prisma.order.update({ where: { id }, data: { status } })
-    return dbRowToOrder(row)
+  })
+  const subtotal = items.reduce((sum, item) => sum + item.lineTotal, 0)
+  const discount = await resolveDiscount(input.discountCode, subtotal)
+  const total = Math.max(subtotal - discount.amount, 0)
+  const id = crypto.randomUUID()
+
+  if (!HAS_DB) {
+    const order: Order = {
+      id,
+      orderNumber: generateOrderNumber(),
+      customerName,
+      tableId: input.tableId,
+      status: 'PENDING_PAYMENT',
+      paymentStatus: 'UNPAID',
+      paymentMethod: input.paymentMethod,
+      items,
+      subtotal,
+      total,
+      createdAt: new Date().toISOString(),
+    }
+    memOrders.set(id, order)
+    return order
   }
 
-  const order = memOrders.get(id)
-  if (!order) throw new Error('Order tidak ditemukan.')
-  if (order.paymentStatus !== 'PAID') {
-    throw new Error('Order belum PAID. Kitchen tidak boleh memproses order ini.')
+  const row = await prisma.order.create({
+    data: {
+      id,
+      orderNumber: generateOrderNumber(),
+      customerName,
+      tableId: input.tableId.trim(),
+      status: 'PENDING_PAYMENT',
+      paymentStatus: 'UNPAID',
+      paymentMethod: input.paymentMethod,
+      itemsJson: JSON.stringify(items),
+      subtotal,
+      total,
+      discountCode: discount.code,
+      discountName: discount.name,
+      discountAmount: discount.amount,
+    },
+  })
+  return rowToOrder(row)
+}
+
+export async function getOrder(id: string) {
+  if (!HAS_DB) return memOrders.get(id) ?? null
+  const row = await prisma.order.findUnique({ where: { id } })
+  return row ? rowToOrder(row) : null
+}
+
+export async function getAllOrders(paidOnly = false, statusFilter?: string) {
+  if (!HAS_DB) {
+    return Array.from(memOrders.values())
+      .filter((order) => !paidOnly || order.paymentStatus === 'PAID')
+      .filter((order) => !statusFilter || order.status === statusFilter)
+      .sort((a, b) => b.createdAt.localeCompare(a.createdAt))
   }
-  const updated: Order = { ...order, status }
-  memOrders.set(id, updated)
-  return updated
+  const rows = await prisma.order.findMany({
+    where: {
+      ...(paidOnly ? { paymentStatus: 'PAID' } : {}),
+      ...(statusFilter ? { status: statusFilter } : {}),
+    },
+    orderBy: { createdAt: 'desc' },
+  })
+  return rows.map(rowToOrder)
+}
+
+export async function confirmPayment(id: string, actor?: { id?: string; name?: string }) {
+  if (!HAS_DB) {
+    const order = memOrders.get(id)
+    if (!order) throw new Error('Order tidak ditemukan.')
+    if (order.paymentStatus === 'PAID') throw new Error('Order sudah dibayar dan tidak dapat dikonfirmasi ulang.')
+    const key = todayKey()
+    const queueNumber = (memQueueCounters.get(key) ?? 0) + 1
+    memQueueCounters.set(key, queueNumber)
+    const updated: Order = { ...order, paymentStatus: 'PAID', status: 'QUEUED', queueNumber, paidAt: new Date().toISOString() }
+    memOrders.set(id, updated)
+    return updated
+  }
+
+  const row = await prisma.$transaction(async (tx) => {
+    const existing = await tx.order.findUnique({ where: { id } })
+    if (!existing) throw new Error('Order tidak ditemukan.')
+    if (existing.paymentStatus === 'PAID') throw new Error('Order sudah dibayar dan tidak dapat dikonfirmasi ulang.')
+    if (existing.paymentStatus !== 'UNPAID' || existing.status !== 'PENDING_PAYMENT') throw new Error('Status order tidak dapat dibayar.')
+
+    const counter = await tx.queueCounter.upsert({
+      where: { dateKey: todayKey() },
+      update: { counter: { increment: 1 } },
+      create: { dateKey: todayKey(), counter: 1 },
+    })
+    const updated = await tx.order.update({
+      where: { id },
+      data: { paymentStatus: 'PAID', status: 'QUEUED', queueNumber: counter.counter, paidAt: new Date(), confirmedById: actor?.id },
+    })
+    await tx.auditLog.create({
+      data: { userId: actor?.id, userName: actor?.name, action: 'CONFIRM_PAYMENT', entity: 'Order', entityId: id, metadata: JSON.stringify({ queueNumber: counter.counter, total: updated.total }) },
+    })
+    return updated
+  })
+  return rowToOrder(row)
+}
+
+export async function updateKitchenStatus(id: string, status: Order['status'], actor?: { id?: string; name?: string }) {
+  const transitions: Partial<Record<Order['status'], Order['status']>> = { QUEUED: 'PREPARING', PREPARING: 'READY', READY: 'COMPLETED' }
+  if (!HAS_DB) {
+    const order = memOrders.get(id)
+    if (!order) throw new Error('Order tidak ditemukan.')
+    if (order.paymentStatus !== 'PAID' || transitions[order.status] !== status) throw new Error('Transisi status tidak valid.')
+    const updated = { ...order, status }
+    memOrders.set(id, updated)
+    return updated
+  }
+
+  const row = await prisma.$transaction(async (tx) => {
+    const existing = await tx.order.findUnique({ where: { id } })
+    if (!existing) throw new Error('Order tidak ditemukan.')
+    if (existing.paymentStatus !== 'PAID') throw new Error('Order belum dibayar.')
+    if (transitions[existing.status as Order['status']] !== status) throw new Error('Transisi status tidak valid.')
+    const updated = await tx.order.update({ where: { id }, data: { status } })
+    await tx.auditLog.create({
+      data: { userId: actor?.id, userName: actor?.name, action: 'UPDATE_KITCHEN_STATUS', entity: 'Order', entityId: id, metadata: JSON.stringify({ from: existing.status, to: status }) },
+    })
+    return updated
+  })
+  return rowToOrder(row)
 }

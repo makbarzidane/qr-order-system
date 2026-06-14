@@ -22,6 +22,7 @@ export default function CheckoutPage() {
   const [nameError, setNameError] = useState('')
   const [methodError, setMethodError] = useState('')
   const [isSubmitting, setIsSubmitting] = useState(false)
+  const [discountCode, setDiscountCode] = useState('')
 
   // Track whether we already checked — prevents clearCart() from re-triggering
   // the guard after items are cleared during successful order submission
@@ -89,6 +90,7 @@ export default function CheckoutPage() {
           tableId: state.tableId,
           paymentMethod,
           items: state.items,
+          discountCode: discountCode.trim() || undefined,
         }),
       })
 
@@ -178,6 +180,13 @@ export default function CheckoutPage() {
               />
             </label>
             {nameError && <p className="mt-1.5 text-xs text-red-500">{nameError}</p>}
+          </div>
+
+          {/* Payment method */}
+          <div className="bg-white rounded-xl shadow-sm border border-stone-100 p-4">
+            <label className="block text-sm font-semibold text-stone-900">Kode promo opsional</label>
+            <input value={discountCode} onChange={(e) => setDiscountCode(e.target.value.toUpperCase())} placeholder="Contoh: HEMAT10" className="mt-2 w-full border border-stone-200 rounded-lg px-3 py-2.5 text-sm uppercase focus:outline-none focus:ring-2 focus:ring-amber-400" />
+            <p className="mt-1 text-xs text-stone-500">Promo akan divalidasi dan dihitung ulang oleh server.</p>
           </div>
 
           {/* Payment method */}

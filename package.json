@@ -1,6 +1,6 @@
 {
   "name": "qr-order-system",
-  "version": "0.1.5",
+  "version": "0.2.0",
   "private": true,
   "scripts": {
     "dev": "next dev",
@@ -10,24 +10,30 @@
     "postinstall": "prisma generate",
     "db:push": "prisma db push",
     "db:migrate": "prisma migrate dev",
-    "db:studio": "prisma studio"
+    "db:studio": "prisma studio",
+    "db:seed": "ts-node --compiler-options \"{\\\"module\\\":\\\"CommonJS\\\"}\" prisma/seed.ts",
+    "reset:orders": "ts-node --compiler-options \"{\\\"module\\\":\\\"CommonJS\\\"}\" scripts/reset-orders.ts"
   },
   "dependencies": {
     "@prisma/client": "^5.22.0",
-    "next": "14.2.18",
+    "bcryptjs": "^2.4.3",
+    "next": "14.2.35",
+    "next-auth": "^4.24.11",
     "react": "^18",
     "react-dom": "^18"
   },
   "devDependencies": {
+    "@types/bcryptjs": "^2.4.6",
     "@types/node": "^20",
     "@types/react": "^18",
     "@types/react-dom": "^18",
     "autoprefixer": "^10",
     "eslint": "^8",
-    "eslint-config-next": "14.2.18",
+    "eslint-config-next": "14.2.35",
     "postcss": "^8",
     "prisma": "^5.22.0",
     "tailwindcss": "^3.4.1",
+    "ts-node": "^10.9.2",
     "typescript": "^5"
   }
 }

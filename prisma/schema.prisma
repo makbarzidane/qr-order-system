@@ -7,33 +7,132 @@ datasource db {
   url      = env("DATABASE_URL")
 }
 
-// ─── Phase 1.5: Simplified flat schema ──────────────────────────────────────
-// Items stored as JSON in Order.itemsJson (avoids join complexity for Phase 1.5)
-// Phase 2 will normalize into proper OrderItem table + add Decimal precision
+enum Role {
+  ADMIN
+  CASHIER
+  KITCHEN
+}
 
+model User {
+  id        String     @id @default(cuid())
+  email     String     @unique
+  name      String
+  password  String
+  role      Role       @default(CASHIER)
+  isActive  Boolean    @default(true)
+  createdAt DateTime   @default(now())
+  updatedAt DateTime   @updatedAt
+  auditLogs AuditLog[]
+}
+
+model Category {
+  id        String     @id @default(cuid())
+  name      String
+  sortOrder Int        @default(0)
+  isActive  Boolean    @default(true)
+  items     MenuItem[]
+  createdAt DateTime   @default(now())
+  updatedAt DateTime   @updatedAt
+}
+
+model MenuItem {
+  id          String   @id @default(cuid())
+  name        String
+  description String   @default("")
+  price       Int
+  imageEmoji  String   @default("MENU")
+  imageUrl    String?
+  isActive    Boolean  @default(true)
+  isAvailable Boolean  @default(true)
+  categoryId  String
+  category    Category @relation(fields: [categoryId], references: [id])
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  @@index([categoryId])
+  @@index([isActive, isAvailable])
+}
+
+model Discount {
+  id          String       @id @default(cuid())
+  name        String
+  code        String?
+  type        String
+  value       Int          @default(0)
+  minPurchase Int          @default(0)
+  isActive    Boolean      @default(true)
+  startsAt    DateTime?
+  endsAt      DateTime?
+  createdAt   DateTime     @default(now())
+  updatedAt   DateTime     @updatedAt
+
+  @@index([isActive])
+  @@index([code])
+  @@index([startsAt, endsAt])
+}
+
+// Order.status: PENDING_PAYMENT | QUEUED | PREPARING | READY | COMPLETED | CANCELLED
+// Order.paymentStatus: UNPAID | PAID | FAILED | EXPIRED | REFUNDED
 model Order {
-  id            String    @id
-  orderNumber   String    @unique
-  customerName  String
-  tableId       String    @default("")
-  status        String    @default("PENDING_PAYMENT")
-  paymentStatus String    @default("UNPAID")
-  paymentMethod String
-  itemsJson     String    // JSON: OrderItem[]
-  subtotal      Float     @default(0)
-  total         Float     @default(0)
-  queueNumber   Int?
-  createdAt     DateTime  @default(now())
-  updatedAt     DateTime  @updatedAt
-  paidAt        DateTime?
+  id             String    @id
+  orderNumber    String    @unique
+  customerName   String
+  tableId        String    @default("")
+  status         String    @default("PENDING_PAYMENT")
+  paymentStatus  String    @default("UNPAID")
+  paymentMethod  String
+  itemsJson      String
+  subtotal       Float     @default(0)
+  total          Float     @default(0)
+  discountCode   String?
+  discountName   String?
+  discountAmount Float     @default(0)
+  queueNumber    Int?
+  confirmedById  String?
+  createdAt      DateTime  @default(now())
+  updatedAt      DateTime  @updatedAt
+  paidAt         DateTime?
 
   @@index([paymentStatus])
   @@index([status])
   @@index([createdAt])
+  @@index([paidAt])
 }
 
-// Daily queue counter — reset every day
 model QueueCounter {
   dateKey String @id
   counter Int    @default(0)
+}
+
+model CafeTable {
+  id        String   @id
+  label     String
+  isActive  Boolean  @default(true)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+}
+
+model CafeSettings {
+  id          String   @id @default("default")
+  name        String   @default("QR Order Cafe")
+  address     String   @default("")
+  whatsapp    String   @default("")
+  invoiceNote String   @default("Terima kasih atas kunjungan Anda.")
+  isOpen      Boolean  @default(true)
+  updatedAt   DateTime @updatedAt
+}
+
+model AuditLog {
+  id        String   @id @default(cuid())
+  userId    String?
+  userName  String?
+  action    String
+  entity    String
+  entityId  String?
+  metadata  String?
+  createdAt DateTime @default(now())
+  user      User?    @relation(fields: [userId], references: [id], onDelete: SetNull)
+
+  @@index([createdAt])
+  @@index([entity, entityId])
 }
