@@ -12,7 +12,10 @@ const ROLE_BADGE: Record<string, string> = {
 async function getUsers() {
   if (!HAS_DB) return []
   const { prisma } = await import('@/lib/prisma')
-  return prisma.user.findMany({ orderBy: { createdAt: 'asc' }, select: { id: true, email: true, name: true, role: true, isActive: true, createdAt: true } })
+  return prisma.user.findMany({
+    orderBy: { createdAt: 'asc' },
+    select: { id: true, email: true, name: true, role: true, isActive: true, createdAt: true },
+  })
 }
 
 export default async function UsersPage() {
