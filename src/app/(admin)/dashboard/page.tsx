@@ -23,10 +23,10 @@ export default async function AdminDashboardPage() {
   const stats = await getStats()
 
   const statCards = [
-    { label: 'Menu Aktif',        value: stats.menuItems,     icon: '🍽️', color: 'bg-amber-500' },
-    { label: 'Kategori',          value: stats.categories,    icon: '📂', color: 'bg-blue-500' },
-    { label: 'Order Hari Ini',    value: stats.ordersToday,   icon: '📋', color: 'bg-green-500' },
-    { label: 'Menunggu Bayar',    value: stats.pendingPayment,icon: '⏳', color: 'bg-yellow-500' },
+    { label: 'Menu Aktif',     value: stats.menuItems,     icon: '🍽️', color: 'bg-amber-500' },
+    { label: 'Kategori',       value: stats.categories,    icon: '📂', color: 'bg-blue-500' },
+    { label: 'Order Hari Ini', value: stats.ordersToday,   icon: '📋', color: 'bg-green-500' },
+    { label: 'Menunggu Bayar', value: stats.pendingPayment,icon: '⏳', color: 'bg-yellow-500' },
   ]
 
   return (
@@ -36,7 +36,6 @@ export default async function AdminDashboardPage() {
         <p className="text-slate-400 text-sm mt-1">Admin Panel · QR Order System Phase 2</p>
       </div>
 
-      {/* Stats */}
       <div className="grid grid-cols-2 lg:grid-cols-4 gap-4 mb-8">
         {statCards.map(card => (
           <div key={card.label} className="bg-slate-800 rounded-xl p-4 border border-slate-700">
@@ -49,7 +48,6 @@ export default async function AdminDashboardPage() {
         ))}
       </div>
 
-      {/* Demo accounts */}
       <div className="bg-slate-800 rounded-xl p-5 border border-slate-700 mb-6">
         <h2 className="font-semibold text-sm mb-4 flex items-center gap-2">🧪 Akun Seed (default)</h2>
         <div className="space-y-2">
@@ -66,10 +64,9 @@ export default async function AdminDashboardPage() {
             </div>
           ))}
         </div>
-        <p className="text-xs text-slate-500 mt-3">Jalankan <code className="text-amber-400 bg-slate-900 px-1 rounded">npm run db:seed</code> untuk membuat akun-akun ini di database.</p>
+        <p className="text-xs text-slate-500 mt-3">Jalankan <code className="text-amber-400 bg-slate-900 px-1 rounded">npm run db:seed</code> untuk membuat akun-akun ini.</p>
       </div>
 
-      {/* Quick links */}
       <div className="grid grid-cols-2 gap-3">
         <Link href="/admin/categories" className="bg-slate-800 hover:bg-slate-700 border border-slate-700 rounded-xl p-4 transition">
           <p className="font-semibold text-sm">📂 Kelola Kategori</p>
