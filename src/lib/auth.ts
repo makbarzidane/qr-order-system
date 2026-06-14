@@ -6,6 +6,12 @@ import type { Role } from '@/types'
 
 const HAS_DB = Boolean(process.env.DATABASE_URL)
 
+const DEMO_USERS: Record<string, { password: string; role: Role; name: string }> = {
+  'admin@qrorder.app': { password: 'admin123', role: 'ADMIN', name: 'Admin' },
+  'cashier@qrorder.app': { password: 'cashier123', role: 'CASHIER', name: 'Kasir' },
+  'kitchen@qrorder.app': { password: 'kitchen123', role: 'KITCHEN', name: 'Dapur' },
+}
+
 export const authOptions: NextAuthOptions = {
   providers: [
     CredentialsProvider({
@@ -16,17 +22,16 @@ export const authOptions: NextAuthOptions = {
       },
       async authorize(credentials) {
         if (!credentials?.email || !credentials?.password) return null
-        if (!HAS_DB) {
-          const DEMO: Record<string, { password: string; role: Role; name: string }> = {
-            'admin@qrorder.app':   { password: 'admin123',   role: 'ADMIN',   name: 'Admin' },
-            'cashier@qrorder.app': { password: 'cashier123', role: 'CASHIER', name: 'Kasir' },
-            'kitchen@qrorder.app': { password: 'kitchen123', role: 'KITCHEN', name: 'Dapur' },
-          }
-          const demo = DEMO[credentials.email]
-          if (!demo || demo.password !== credentials.password) return null
-          return { id: credentials.email, email: credentials.email, name: demo.name, role: demo.role }
+        const email = credentials.email.trim().toLowerCase()
+        const demo = DEMO_USERS[email]
+
+        if (demo && demo.password === credentials.password) {
+          return { id: email, email, name: demo.name, role: demo.role }
         }
-        const user = await prisma.user.findUnique({ where: { email: credentials.email } })
+
+        if (!HAS_DB) return null
+
+        const user = await prisma.user.findUnique({ where: { email } })
         if (!user || !user.isActive) return null
         const valid = await bcrypt.compare(credentials.password, user.password)
         if (!valid) return null

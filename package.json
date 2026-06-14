@@ -11,8 +11,8 @@
     "db:push": "prisma db push",
     "db:migrate": "prisma migrate dev",
     "db:studio": "prisma studio",
-    "db:seed": "ts-node --compiler-options '{\"module\":\"CommonJS\"}' prisma/seed.ts",
-    "reset:orders": "ts-node --compiler-options '{\"module\":\"CommonJS\"}' scripts/reset-orders.ts"
+    "db:seed": "ts-node --compiler-options \"{\\\"module\\\":\\\"CommonJS\\\"}\" prisma/seed.ts",
+    "reset:orders": "ts-node --compiler-options \"{\\\"module\\\":\\\"CommonJS\\\"}\" scripts/reset-orders.ts"
   },
   "dependencies": {
     "@prisma/client": "^5.22.0",
