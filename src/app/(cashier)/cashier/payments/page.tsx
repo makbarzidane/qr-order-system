@@ -1,150 +1,80 @@
 'use client'
-import { useEffect, useState, useCallback } from 'react'
-import { Order } from '@/types'
+
+import { useCallback, useEffect, useMemo, useState } from 'react'
 import { formatRupiah } from '@/lib/menu-data'
+import type { Order } from '@/types'
+
+const methodLabels: Record<string, string> = { CASH: 'Tunai', QRIS: 'QRIS', TRANSFER: 'Transfer', DEBIT_EDC: 'Debit / EDC' }
+
+function formatTime(value: string) {
+  return new Date(value).toLocaleTimeString('id-ID', { timeZone: 'Asia/Jakarta', hour: '2-digit', minute: '2-digit' })
+}
 
 export default function CashierPaymentsPage() {
   const [pending, setPending] = useState<Order[]>([])
   const [recent, setRecent] = useState<Order[]>([])
+  const [selectedId, setSelectedId] = useState<string | null>(null)
   const [loading, setLoading] = useState(true)
   const [confirming, setConfirming] = useState<string | null>(null)
-  const [successMsg, setSuccessMsg] = useState('')
+  const [message, setMessage] = useState('')
+  const [error, setError] = useState('')
 
   const fetchOrders = useCallback(async () => {
     try {
-      const [pendingRes, recentRes] = await Promise.all([
-        fetch('/api/orders?status=PENDING_PAYMENT'),
-        fetch('/api/orders?paid=true'),
-      ])
-      const [pendingData, recentData] = await Promise.all([pendingRes.json(), recentRes.json()])
-      setPending(Array.isArray(pendingData) ? pendingData : [])
+      const [pendingResponse, recentResponse] = await Promise.all([fetch('/api/orders?status=PENDING_PAYMENT'), fetch('/api/orders?paid=true')])
+      if (!pendingResponse.ok || !recentResponse.ok) throw new Error('Gagal memperbarui daftar pembayaran.')
+      const [pendingData, recentData] = await Promise.all([pendingResponse.json(), recentResponse.json()])
+      const nextPending = Array.isArray(pendingData) ? pendingData : []
+      setPending(nextPending)
       setRecent(Array.isArray(recentData) ? recentData.slice(0, 8) : [])
-    } finally { setLoading(false) }
+      setSelectedId((current) => current && nextPending.some((order) => order.id === current) ? current : nextPending[0]?.id ?? null)
+      setError('')
+    } catch (cause) {
+      setError(cause instanceof Error ? cause.message : 'Gagal memperbarui data.')
+    } finally {
+      setLoading(false)
+    }
   }, [])
 
   useEffect(() => {
     fetchOrders()
-    const interval = setInterval(fetchOrders, 5000)
-    return () => clearInterval(interval)
+    const interval = window.setInterval(fetchOrders, 5000)
+    return () => window.clearInterval(interval)
   }, [fetchOrders])
 
-  async function handleConfirm(orderId: string) {
+  const selected = useMemo(() => pending.find((order) => order.id === selectedId) ?? null, [pending, selectedId])
+
+  async function confirmPayment(orderId: string) {
     setConfirming(orderId)
+    setError('')
     try {
-      const res = await fetch(`/api/orders/${orderId}`, {
-        method: 'PATCH',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ action: 'confirm_payment' }),
-      })
-      if (res.ok) {
-        const order: Order = await res.json()
-        setSuccessMsg(`✅ Pembayaran #${order.queueNumber} (${order.customerName}) dikonfirmasi!`)
-        setTimeout(() => setSuccessMsg(''), 4000)
-        await fetchOrders()
-      }
-    } finally { setConfirming(null) }
+      const response = await fetch(`/api/orders/${orderId}`, { method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ action: 'confirm_payment' }) })
+      const order = await response.json()
+      if (!response.ok) throw new Error(order.error || 'Pembayaran gagal dikonfirmasi.')
+      setMessage(`Pembayaran dikonfirmasi. Nomor antrean #${order.queueNumber}.`)
+      window.setTimeout(() => setMessage(''), 4000)
+      await fetchOrders()
+    } catch (cause) {
+      setError(cause instanceof Error ? cause.message : 'Pembayaran gagal dikonfirmasi.')
+    } finally {
+      setConfirming(null)
+    }
   }
-
-  function formatTime(iso: string) {
-    return new Date(iso).toLocaleTimeString('id-ID', { timeZone: 'Asia/Jakarta', hour: '2-digit', minute: '2-digit' })
-  }
-
-  const METHOD_ICON: Record<string, string> = { CASH: '💵', QRIS: '📱', TRANSFER: '🏦', DEBIT_EDC: '💳' }
-  const METHOD_LABEL: Record<string, string> = { CASH: 'Cash', QRIS: 'QRIS', TRANSFER: 'Transfer', DEBIT_EDC: 'Debit/EDC' }
 
   return (
     <div>
-      <div className="flex items-center justify-between mb-6">
-        <h2 className="text-lg font-bold text-stone-900">
-          Konfirmasi Pembayaran
-          {pending.length > 0 && (
-            <span className="ml-2 bg-amber-500 text-white text-xs font-bold px-2 py-0.5 rounded-full">{pending.length}</span>
-          )}
-        </h2>
-        <div className="flex items-center gap-2">
-          <span className="w-2 h-2 rounded-full bg-green-400 animate-pulse"></span>
-          <span className="text-xs text-stone-500">Auto-refresh 5s</span>
-        </div>
-      </div>
+      <div className="mb-6 flex flex-col gap-3 sm:flex-row sm:items-end sm:justify-between"><div><h2 className="text-2xl font-black tracking-tight text-slate-950">Konfirmasi pembayaran</h2><p className="mt-1 text-sm text-slate-500">Pilih order, periksa detail, lalu konfirmasi satu kali.</p></div><div className="flex items-center gap-2 text-xs font-semibold text-emerald-700"><span className="h-2 w-2 animate-pulse rounded-full bg-emerald-500" />Auto-refresh 5 detik</div></div>
+      {message ? <p className="mb-4 rounded-xl border border-emerald-200 bg-emerald-50 p-3 text-sm font-semibold text-emerald-700">{message}</p> : null}
+      {error ? <p className="mb-4 rounded-xl border border-red-200 bg-red-50 p-3 text-sm font-semibold text-red-700">{error}</p> : null}
 
-      {successMsg && (
-        <div className="mb-4 bg-green-50 border border-green-200 text-green-800 rounded-xl px-4 py-3 text-sm font-medium">
-          {successMsg}
+      {loading ? <div className="rounded-2xl border border-slate-200 bg-white p-12 text-center text-sm text-slate-500">Memuat pembayaran...</div> : pending.length === 0 ? <div className="rounded-2xl border border-slate-200 bg-white p-12 text-center shadow-sm"><div className="mx-auto grid h-14 w-14 place-items-center rounded-2xl bg-emerald-50 font-black text-emerald-600">OK</div><h3 className="mt-4 font-bold text-slate-950">Tidak ada pembayaran tertunda</h3><p className="mt-1 text-sm text-slate-500">Order baru akan muncul otomatis.</p></div> : (
+        <div className="grid gap-5 lg:grid-cols-[minmax(0,1.4fr)_minmax(340px,0.8fr)]">
+          <section className="overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm"><div className="border-b border-slate-200 px-5 py-4"><h3 className="font-bold text-slate-950">Antrean pembayaran</h3><p className="mt-1 text-xs text-slate-500">{pending.length} order menunggu konfirmasi</p></div><div className="divide-y divide-slate-100">{pending.map((order) => <button key={order.id} onClick={() => setSelectedId(order.id)} className={`grid w-full grid-cols-[auto_1fr_auto] items-center gap-4 px-5 py-4 text-left transition hover:bg-slate-50 ${selectedId === order.id ? 'bg-amber-50 ring-1 ring-inset ring-amber-400' : ''}`}><span className="grid h-10 w-10 place-items-center rounded-xl bg-slate-100 text-sm font-black text-slate-700">{pending.indexOf(order) + 1}</span><span className="min-w-0"><span className="block truncate font-bold text-slate-950">{order.customerName}</span><span className="mt-1 block text-xs text-slate-500">{order.orderNumber} · {order.tableId || 'Take away'} · {formatTime(order.createdAt)}</span></span><span className="text-right"><span className="block font-extrabold text-slate-950">{formatRupiah(order.total)}</span><span className="mt-1 block text-xs font-semibold text-amber-700">{methodLabels[order.paymentMethod]}</span></span></button>)}</div></section>
+          {selected ? <aside className="h-fit rounded-2xl border border-slate-200 bg-white p-5 shadow-sm lg:sticky lg:top-24"><div className="flex items-start justify-between gap-3"><div><p className="text-xs font-bold uppercase tracking-wide text-slate-400">Detail pembayaran</p><h3 className="mt-1 text-xl font-black text-slate-950">{selected.orderNumber}</h3></div><span className="rounded-lg border border-amber-200 bg-amber-50 px-2.5 py-1 text-xs font-bold text-amber-800">{methodLabels[selected.paymentMethod]}</span></div><dl className="mt-5 grid grid-cols-2 gap-4 rounded-xl bg-slate-50 p-4 text-sm"><div><dt className="text-xs text-slate-500">Pelanggan</dt><dd className="mt-1 font-bold text-slate-950">{selected.customerName}</dd></div><div><dt className="text-xs text-slate-500">Meja</dt><dd className="mt-1 font-bold capitalize text-slate-950">{selected.tableId.replace(/-/g, ' ') || '-'}</dd></div></dl><div className="mt-5 space-y-3">{selected.items.map((item) => <div key={item.id} className="flex justify-between gap-3 text-sm"><div><p className="font-semibold text-slate-700">{item.quantity} x {item.nameSnapshot}</p>{item.note ? <p className="mt-0.5 text-xs text-slate-400">{item.note}</p> : null}</div><span className="font-semibold text-slate-950">{formatRupiah(item.lineTotal)}</span></div>)}</div><div className="mt-5 flex items-center justify-between border-t border-slate-200 pt-4"><span className="font-bold text-slate-950">Total</span><span className="text-2xl font-black text-emerald-700">{formatRupiah(selected.total)}</span></div><button onClick={() => confirmPayment(selected.id)} disabled={confirming === selected.id} className="mt-5 w-full rounded-xl bg-emerald-600 px-5 py-3.5 text-sm font-extrabold text-white transition hover:bg-emerald-500 disabled:opacity-60">{confirming === selected.id ? 'Memproses...' : 'Konfirmasi pembayaran'}</button><p className="mt-3 text-center text-xs leading-5 text-slate-400">Konfirmasi akan membuat nomor antrean dan mengirim order ke kitchen.</p></aside> : null}
         </div>
       )}
 
-      {/* Pending payments */}
-      {loading ? (
-        <p className="text-stone-400 text-sm animate-pulse">Memuat...</p>
-      ) : pending.length === 0 ? (
-        <div className="bg-white rounded-2xl border border-stone-100 shadow-sm p-10 text-center mb-8">
-          <p className="text-4xl mb-3">💵</p>
-          <p className="font-semibold text-stone-700">Tidak ada order menunggu bayar</p>
-          <p className="text-sm text-stone-400 mt-1">Order baru akan muncul otomatis di sini</p>
-        </div>
-      ) : (
-        <div className="space-y-4 mb-10">
-          {pending.map(order => (
-            <div key={order.id} className="bg-white rounded-2xl border-2 border-amber-200 shadow-sm p-5">
-              <div className="flex items-start justify-between mb-3">
-                <div>
-                  <p className="font-bold text-stone-900">{order.orderNumber}</p>
-                  <p className="text-sm text-stone-600 mt-0.5">👤 {order.customerName}</p>
-                  {order.tableId && <p className="text-xs text-stone-400">📍 {order.tableId}</p>}
-                </div>
-                <div className="text-right">
-                  <p className="text-xs text-stone-400">{formatTime(order.createdAt)}</p>
-                  <div className="flex items-center gap-1.5 mt-1">
-                    <span className="text-base">{METHOD_ICON[order.paymentMethod] ?? '💰'}</span>
-                    <span className="text-sm font-semibold text-stone-700">{METHOD_LABEL[order.paymentMethod] ?? order.paymentMethod}</span>
-                  </div>
-                </div>
-              </div>
-
-              {/* Items */}
-              <div className="bg-stone-50 rounded-xl p-3 mb-3 space-y-1">
-                {order.items.map(item => (
-                  <div key={item.id} className="flex justify-between text-sm">
-                    <span className="text-stone-600">{item.nameSnapshot} <span className="text-stone-400">×{item.quantity}</span></span>
-                    <span className="font-medium tabular-nums">{formatRupiah(item.lineTotal)}</span>
-                  </div>
-                ))}
-                <div className="border-t border-stone-200 pt-2 mt-1 flex justify-between font-bold">
-                  <span>Total</span>
-                  <span className="text-amber-600">{formatRupiah(order.total)}</span>
-                </div>
-              </div>
-
-              <button
-                onClick={() => handleConfirm(order.id)}
-                disabled={confirming === order.id}
-                className="w-full bg-green-500 hover:bg-green-600 active:scale-[.98] disabled:opacity-60 text-white font-bold py-3 rounded-xl text-sm transition">
-                {confirming === order.id ? '⏳ Memproses...' : '✓ Konfirmasi Pembayaran'}
-              </button>
-            </div>
-          ))}
-        </div>
-      )}
-
-      {/* Recent paid */}
-      {recent.length > 0 && (
-        <div>
-          <h3 className="text-sm font-semibold text-stone-500 uppercase tracking-wider mb-3">Sudah Lunas (terakhir)</h3>
-          <div className="space-y-2">
-            {recent.map(order => (
-              <div key={order.id} className="bg-white rounded-xl border border-stone-100 px-4 py-3 flex items-center gap-3">
-                <span className="w-7 h-7 bg-green-100 rounded-full flex items-center justify-center text-sm font-bold text-green-700">{order.queueNumber ?? '-'}</span>
-                <div className="flex-1 min-w-0">
-                  <p className="text-sm font-medium text-stone-900">{order.customerName}</p>
-                  <p className="text-xs text-stone-400">{order.orderNumber} · {formatTime(order.createdAt)}</p>
-                </div>
-                <span className="text-sm font-semibold text-stone-700 tabular-nums">{formatRupiah(order.total)}</span>
-                <span className="text-xs bg-green-100 text-green-700 font-semibold px-2 py-0.5 rounded-full">✅ Lunas</span>
-              </div>
-            ))}
-          </div>
-        </div>
-      )}
+      {recent.length ? <section className="mt-8 overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm"><div className="border-b border-slate-200 px-5 py-4"><h3 className="font-bold text-slate-950">Transaksi lunas terbaru</h3></div><div className="overflow-x-auto"><table className="w-full min-w-[620px] text-left text-sm"><thead className="bg-slate-50 text-xs uppercase text-slate-500"><tr><th className="px-5 py-3">Antrean</th><th className="px-5 py-3">Order</th><th className="px-5 py-3">Pelanggan</th><th className="px-5 py-3">Metode</th><th className="px-5 py-3 text-right">Total</th></tr></thead><tbody className="divide-y divide-slate-100">{recent.map((order) => <tr key={order.id}><td className="px-5 py-4 font-black text-emerald-700">#{order.queueNumber}</td><td className="px-5 py-4 font-semibold text-slate-950">{order.orderNumber}</td><td className="px-5 py-4 text-slate-600">{order.customerName}</td><td className="px-5 py-4 text-slate-600">{methodLabels[order.paymentMethod]}</td><td className="px-5 py-4 text-right font-semibold text-slate-950">{formatRupiah(order.total)}</td></tr>)}</tbody></table></div></section> : null}
     </div>
   )
 }

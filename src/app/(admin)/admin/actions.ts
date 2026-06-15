@@ -70,6 +70,30 @@ export async function deleteCategory(id: string) {
 
 type MenuInput = { name: string; description?: string; price: number; imageEmoji?: string; imageUrl?: string; categoryId: string; isActive?: boolean; isAvailable?: boolean }
 
+function normalizeImage(value?: string) {
+  const image = value?.trim()
+  if (!image) return null
+
+  if (image.startsWith('data:')) {
+    if (!/^data:image\/(jpeg|png|webp);base64,[a-z0-9+/=]+$/i.test(image)) {
+      throw new Error('Format gambar tidak valid.')
+    }
+    if (image.length > 850_000) {
+      throw new Error('Gambar terlalu besar. Maksimal sekitar 600 KB setelah kompresi.')
+    }
+    return image
+  }
+
+  try {
+    const url = new URL(image)
+    if (!['http:', 'https:'].includes(url.protocol)) throw new Error()
+  } catch {
+    throw new Error('URL gambar tidak valid.')
+  }
+  if (image.length > 2048) throw new Error('URL gambar terlalu panjang.')
+  return image
+}
+
 function normalizeMenu(data: MenuInput) {
   if (!Number.isInteger(data.price) || data.price < 0) throw new Error('Harga harus berupa rupiah bulat dan tidak boleh minus.')
   return {
@@ -77,7 +101,7 @@ function normalizeMenu(data: MenuInput) {
     description: data.description?.trim() ?? '',
     price: data.price,
     imageEmoji: data.imageEmoji?.trim() || 'MENU',
-    imageUrl: data.imageUrl?.trim() || null,
+    imageUrl: normalizeImage(data.imageUrl),
     categoryId: required(data.categoryId, 'Kategori'),
     isActive: data.isActive ?? true,
     isAvailable: data.isAvailable ?? true,
