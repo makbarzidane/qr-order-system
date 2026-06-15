@@ -1,5 +1,5 @@
 import Link from 'next/link'
-import { Badge, Card, PageHeader } from '@/components/admin/UI'
+import { Badge, DataTable, EmptyState, MetricCard, PageHeader, SectionCard, primaryButton, secondaryButton } from '@/components/admin/UI'
 import { SalesChart, type SalesPoint } from '@/components/admin/SalesChart'
 import { formatRupiah } from '@/lib/menu-data'
 import { prisma } from '@/lib/prisma'
@@ -12,12 +12,7 @@ function startOfToday() {
 }
 
 function dateKey(date: Date) {
-  return new Intl.DateTimeFormat('en-CA', {
-    timeZone: 'Asia/Jakarta',
-    year: 'numeric',
-    month: '2-digit',
-    day: '2-digit',
-  }).format(date)
+  return new Intl.DateTimeFormat('en-CA', { timeZone: 'Asia/Jakarta', year: 'numeric', month: '2-digit', day: '2-digit' }).format(date)
 }
 
 function buildSalesData(orders: { total: number; paidAt: Date | null }[]): SalesPoint[] {
@@ -45,19 +40,40 @@ export default async function AdminDashboardPage() {
   const sevenDaysAgo = new Date()
   sevenDaysAgo.setDate(sevenDaysAgo.getDate() - 7)
 
-  const [menuActive, categories, ordersToday, pending, paid, revenue, recent, paidOrders, chartOrders, audits] = await prisma.$transaction([
-    prisma.menuItem.count({ where: { isActive: true } }),
-    prisma.category.count({ where: { isActive: true } }),
-    prisma.order.count({ where: { createdAt: { gte: today } } }),
-    prisma.order.count({ where: { paymentStatus: 'UNPAID' } }),
-    prisma.order.count({ where: { paymentStatus: 'PAID', paidAt: { gte: today } } }),
-    prisma.order.aggregate({ where: { paymentStatus: 'PAID', paidAt: { gte: today } }, _sum: { total: true } }),
-    prisma.order.findMany({ orderBy: { createdAt: 'desc' }, take: 6 }),
-    prisma.order.findMany({ where: { paymentStatus: 'PAID' }, orderBy: { paidAt: 'desc' }, take: 500, select: { itemsJson: true } }),
-    prisma.order.findMany({ where: { paymentStatus: 'PAID', paidAt: { gte: sevenDaysAgo } }, select: { total: true, paidAt: true } }),
-    prisma.auditLog.findMany({ orderBy: { createdAt: 'desc' }, take: 5 }),
-  ])
+  let loadError: string | null = null
+  let data = {
+    menuActive: 0,
+    categories: 0,
+    ordersToday: 0,
+    pending: 0,
+    paid: 0,
+    revenue: { _sum: { total: 0 as number | null } },
+    recent: [] as Awaited<ReturnType<typeof prisma.order.findMany>>,
+    paidOrders: [] as Array<{ itemsJson: string }>,
+    chartOrders: [] as Array<{ total: number; paidAt: Date | null }>,
+    audits: [] as Awaited<ReturnType<typeof prisma.auditLog.findMany>>,
+  }
 
+  try {
+    const [menuActive, categories, ordersToday, pending, paid, revenue, recent, paidOrders, chartOrders, audits] = await prisma.$transaction([
+      prisma.menuItem.count({ where: { isActive: true } }),
+      prisma.category.count({ where: { isActive: true } }),
+      prisma.order.count({ where: { createdAt: { gte: today } } }),
+      prisma.order.count({ where: { paymentStatus: 'UNPAID' } }),
+      prisma.order.count({ where: { paymentStatus: 'PAID', paidAt: { gte: today } } }),
+      prisma.order.aggregate({ where: { paymentStatus: 'PAID', paidAt: { gte: today } }, _sum: { total: true } }),
+      prisma.order.findMany({ orderBy: { createdAt: 'desc' }, take: 6 }),
+      prisma.order.findMany({ where: { paymentStatus: 'PAID' }, orderBy: { paidAt: 'desc' }, take: 500, select: { itemsJson: true } }),
+      prisma.order.findMany({ where: { paymentStatus: 'PAID', paidAt: { gte: sevenDaysAgo } }, select: { total: true, paidAt: true } }),
+      prisma.auditLog.findMany({ orderBy: { createdAt: 'desc' }, take: 5 }),
+    ])
+    data = { menuActive, categories, ordersToday, pending, paid, revenue, recent, paidOrders, chartOrders, audits }
+  } catch (error) {
+    console.warn('Failed to load dashboard', error)
+    loadError = 'Database belum bisa dihubungi. Dashboard tampil dalam mode kosong agar CMS tetap bisa dibuka.'
+  }
+
+  const { menuActive, categories, ordersToday, pending, paid, revenue, recent, paidOrders, chartOrders, audits } = data
   const sales = new Map<string, number>()
   paidOrders.forEach(({ itemsJson }) => {
     try {
@@ -67,69 +83,91 @@ export default async function AdminDashboardPage() {
       // Ignore old malformed snapshots without breaking the dashboard.
     }
   })
+
   const best = Array.from(sales.entries()).sort((a, b) => b[1] - a[1]).slice(0, 5)
   const salesData = buildSalesData(chartOrders)
   const stats = [
-    { label: 'Pemasukan hari ini', value: formatRupiah(revenue._sum.total ?? 0), detail: `${paid} transaksi lunas`, tone: 'amber' },
-    { label: 'Order hari ini', value: ordersToday, detail: 'Semua kanal pembayaran', tone: 'blue' },
-    { label: 'Menunggu bayar', value: pending, detail: 'Perlu tindakan kasir', tone: 'red' },
-    { label: 'Menu aktif', value: menuActive, detail: `${categories} kategori aktif`, tone: 'green' },
-  ] as const
+    { label: 'Pemasukan hari ini', value: formatRupiah(revenue._sum.total ?? 0), detail: `${paid} transaksi lunas`, tone: 'amber' as const },
+    { label: 'Order hari ini', value: ordersToday, detail: 'Semua kanal pembayaran', tone: 'blue' as const },
+    { label: 'Menunggu bayar', value: pending, detail: 'Perlu tindakan kasir', tone: 'red' as const },
+    { label: 'Menu aktif', value: menuActive, detail: `${categories} kategori aktif`, tone: 'green' as const },
+  ]
 
   return (
     <div>
       <PageHeader
         title="Ringkasan operasional"
         description="Pantau penjualan, order, dan aktivitas cafe dari data transaksi aktual."
-        action={<div className="flex gap-2"><Link href="/cashier" className="rounded-xl border border-slate-200 bg-white px-4 py-2.5 text-sm font-semibold text-slate-700 hover:bg-slate-50">Buka kasir</Link><Link href="/admin/menu" className="rounded-xl bg-amber-500 px-4 py-2.5 text-sm font-bold text-slate-950 hover:bg-amber-400">Kelola menu</Link></div>}
+        action={<><Link href="/cashier" className={secondaryButton}>Buka kasir</Link><Link href="/admin/menu" className={primaryButton}>Kelola menu</Link></>}
       />
 
+      {loadError ? <p className="mb-5 rounded-2xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm font-bold text-amber-900">{loadError}</p> : null}
+
       <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
-        {stats.map((stat) => (
-          <Card key={stat.label} className="p-5">
-            <div className="flex items-start justify-between gap-4">
-              <div><p className="text-sm font-medium text-slate-500">{stat.label}</p><p className="mt-3 text-2xl font-extrabold tracking-tight text-slate-950">{stat.value}</p><p className="mt-2 text-xs text-slate-400">{stat.detail}</p></div>
-              <span className={`mt-1 h-10 w-1.5 rounded-full ${stat.tone === 'green' ? 'bg-emerald-500' : stat.tone === 'red' ? 'bg-red-500' : stat.tone === 'blue' ? 'bg-blue-500' : 'bg-amber-500'}`} />
-            </div>
-          </Card>
-        ))}
+        {stats.map((stat) => <MetricCard key={stat.label} {...stat} />)}
       </div>
 
       <div className="mt-6 grid items-start gap-6 xl:grid-cols-[minmax(0,1.7fr)_minmax(310px,0.8fr)]">
-        <Card className="h-fit p-5 sm:p-6">
-          <div className="mb-5 flex items-start justify-between gap-4"><div><h2 className="font-bold text-slate-950">Tren penjualan 7 hari</h2><p className="mt-1 text-sm text-slate-500">Perbandingan omzet dan jumlah order lunas.</p></div><span className="rounded-lg border border-slate-200 px-3 py-2 text-xs font-semibold text-slate-600">7 hari terakhir</span></div>
-          <SalesChart data={salesData} />
-        </Card>
+        <SectionCard title="Tren penjualan 7 hari" description="Perbandingan omzet dan jumlah order lunas." action={<span className="rounded-full border border-slate-200 px-3 py-2 text-xs font-bold text-slate-600">7 hari terakhir</span>} className="h-fit">
+          <div className="p-5 sm:p-6"><SalesChart data={salesData} /></div>
+        </SectionCard>
 
         <div className="space-y-6">
-          <Card className="p-5">
-            <div className="flex items-center justify-between"><h2 className="font-bold text-slate-950">Menu terlaris</h2><Link href="/admin/menu" className="text-xs font-semibold text-amber-700">Kelola menu</Link></div>
-            <div className="mt-4 space-y-3">
+          <SectionCard title="Menu terlaris" description="Dihitung dari snapshot item order paid." action={<Link href="/admin/menu" className="text-xs font-extrabold text-amber-700">Kelola</Link>}>
+            <div className="space-y-3 p-5">
               {best.length ? best.map(([name, quantity], position) => (
-                <div key={name} className="flex items-center gap-3 rounded-xl border border-slate-100 p-3"><span className="grid h-8 w-8 place-items-center rounded-lg bg-slate-950 text-xs font-black text-white">{position + 1}</span><span className="min-w-0 flex-1 truncate text-sm font-semibold text-slate-700">{name}</span><span className="text-sm font-bold text-slate-950">{quantity}</span></div>
-              )) : <p className="py-6 text-center text-sm text-slate-500">Belum ada data penjualan.</p>}
+                <div key={name} className="flex items-center gap-3 rounded-2xl border border-slate-100 bg-slate-50/60 p-3 transition hover:border-amber-200 hover:bg-amber-50/50">
+                  <span className="grid h-9 w-9 place-items-center rounded-xl bg-slate-950 text-xs font-black text-white">{position + 1}</span>
+                  <span className="min-w-0 flex-1 truncate text-sm font-bold text-slate-700">{name}</span>
+                  <span className="text-sm font-black text-slate-950">{quantity}</span>
+                </div>
+              )) : <EmptyState title="Belum ada data" description="Menu terlaris akan tampil setelah ada transaksi paid." />}
             </div>
-          </Card>
+          </SectionCard>
 
-          <Card className="p-5">
-            <h2 className="font-bold text-slate-950">Aktivitas terbaru</h2>
-            <div className="mt-4 space-y-4">
+          <SectionCard title="Aktivitas terbaru" description="Audit log tindakan admin, kasir, dan kitchen.">
+            <div className="space-y-4 p-5">
               {audits.length ? audits.map((log) => (
-                <div key={log.id} className="flex gap-3"><span className="mt-1.5 h-2 w-2 shrink-0 rounded-full bg-amber-500" /><div><p className="text-sm font-semibold text-slate-700">{log.action} {log.entity}</p><p className="mt-0.5 text-xs text-slate-400">{log.userName ?? 'System'} · {log.createdAt.toLocaleString('id-ID', { timeZone: 'Asia/Jakarta' })}</p></div></div>
-              )) : <p className="text-sm text-slate-500">Belum ada aktivitas.</p>}
+                <div key={log.id} className="flex gap-3">
+                  <span className="mt-1.5 h-2.5 w-2.5 shrink-0 rounded-full bg-amber-500 shadow-[0_0_0_4px_rgba(245,158,11,0.14)]" />
+                  <div><p className="text-sm font-bold text-slate-700">{log.action} {log.entity}</p><p className="mt-0.5 text-xs font-medium text-slate-400">{log.userName ?? 'System'} - {log.createdAt.toLocaleString('id-ID', { timeZone: 'Asia/Jakarta' })}</p></div>
+                </div>
+              )) : <p className="text-sm font-semibold text-slate-500">Belum ada aktivitas.</p>}
             </div>
-          </Card>
+          </SectionCard>
         </div>
       </div>
 
-      <Card className="mt-6 overflow-hidden">
-        <div className="flex items-center justify-between border-b border-slate-100 px-5 py-4"><div><h2 className="font-bold text-slate-950">Order terbaru</h2><p className="mt-1 text-xs text-slate-500">Aktivitas transaksi paling baru.</p></div><Link href="/admin/reports" className="text-sm font-semibold text-amber-700">Lihat laporan</Link></div>
-        <div className="overflow-x-auto">
-          <table className="w-full min-w-[680px] text-left text-sm"><thead className="bg-slate-50 text-xs uppercase tracking-wide text-slate-500"><tr><th className="px-5 py-3">Order</th><th className="px-5 py-3">Pelanggan</th><th className="px-5 py-3">Metode</th><th className="px-5 py-3">Status</th><th className="px-5 py-3 text-right">Total</th></tr></thead><tbody className="divide-y divide-slate-100">{recent.map((order) => <tr key={order.id} className="hover:bg-slate-50"><td className="px-5 py-4 font-semibold text-slate-950">{order.orderNumber}</td><td className="px-5 py-4 text-slate-600">{order.customerName}<span className="block text-xs text-slate-400">{order.tableId || 'Take away'}</span></td><td className="px-5 py-4 text-slate-600">{order.paymentMethod}</td><td className="px-5 py-4"><Badge tone={order.paymentStatus === 'PAID' ? 'green' : 'amber'}>{order.paymentStatus === 'PAID' ? 'Lunas' : 'Menunggu'}</Badge></td><td className="px-5 py-4 text-right font-semibold text-slate-950">{formatRupiah(order.total)}</td></tr>)}</tbody></table>
-        </div>
-      </Card>
+      <SectionCard title="Order terbaru" description="Aktivitas transaksi paling baru." action={<Link href="/admin/reports" className="text-sm font-extrabold text-amber-700">Lihat laporan</Link>} className="mt-6">
+        {recent.length === 0 ? (
+          <EmptyState title="Belum ada order" description="Transaksi customer akan tampil di sini setelah checkout dibuat." />
+        ) : (
+          <DataTable columns={['Order', 'Pelanggan', 'Metode', 'Status', 'Total']}>
+            {recent.map((order) => (
+              <tr key={order.id} className="transition hover:bg-slate-50">
+                <td className="px-5 py-4 font-extrabold text-slate-950">{order.orderNumber}</td>
+                <td className="px-5 py-4 text-slate-600"><span className="font-bold text-slate-800">{order.customerName}</span><span className="block text-xs font-medium text-slate-400">{order.tableId || 'Take away'}</span></td>
+                <td className="px-5 py-4 text-sm font-semibold text-slate-600">{order.paymentMethod}</td>
+                <td className="px-5 py-4"><Badge tone={order.paymentStatus === 'PAID' ? 'green' : 'amber'}>{order.paymentStatus === 'PAID' ? 'Lunas' : 'Menunggu'}</Badge></td>
+                <td className="px-5 py-4 text-right font-extrabold text-slate-950">{formatRupiah(order.total)}</td>
+              </tr>
+            ))}
+          </DataTable>
+        )}
+      </SectionCard>
 
-      <div className="mt-6 grid gap-3 sm:grid-cols-2 lg:grid-cols-4">{[['Menu & kategori', '/admin/menu'], ['Promo', '/admin/promos'], ['Kitchen', '/kitchen/display'], ['Meja & QR', '/admin/tables']].map(([label, href]) => <Link key={href} href={href} className="rounded-2xl border border-slate-200 bg-white p-4 text-sm font-bold text-slate-800 shadow-sm transition hover:-translate-y-0.5 hover:border-amber-300 hover:shadow-md">{label}<span className="float-right text-amber-600">-&gt;</span></Link>)}</div>
+      <div className="mt-6 grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
+        {[
+          ['Menu & kategori', '/admin/menu'],
+          ['Promo', '/admin/promos'],
+          ['Kitchen', '/kitchen/display'],
+          ['Meja & QR', '/admin/tables'],
+        ].map(([label, href]) => (
+          <Link key={href} href={href} className="group rounded-3xl border border-slate-200 bg-white p-5 text-sm font-black text-slate-800 shadow-sm transition duration-200 hover:-translate-y-1 hover:border-amber-300 hover:shadow-[0_18px_45px_rgba(15,23,42,0.08)]">
+            {label}<span className="float-right text-amber-600 transition group-hover:translate-x-1">-&gt;</span>
+          </Link>
+        ))}
+      </div>
     </div>
   )
 }
