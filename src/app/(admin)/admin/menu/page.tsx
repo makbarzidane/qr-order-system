@@ -1,0 +1,2 @@
+import { prisma } from '@/lib/prisma';import { MenuManager } from './menu-manager'
+export default async function MenuPage(){const[categories,items]=await Promise.all([prisma.category.findMany({orderBy:{sortOrder:'asc'}}),prisma.menuItem.findMany({include:{category:{select:{id:true,name:true}}},orderBy:{createdAt:'desc'}})]);return <MenuManager categories={categories.map(c=>({id:c.id,name:c.name,isActive:c.isActive}))} items={items}/>}

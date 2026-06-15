@@ -1,11 +1,19 @@
 'use client'
 
-import { useEffect, useRef, useState } from 'react'
 import Link from 'next/link'
 import { useParams } from 'next/navigation'
+import { useEffect, useMemo, useRef, useState } from 'react'
+import { MenuImage } from '@/components/MenuImage'
 import { useCart } from '@/contexts/CartContext'
-import { MENU_ITEMS, CATEGORIES, formatRupiah } from '@/lib/menu-data'
-import { MenuItem } from '@/types'
+import { formatRupiah } from '@/lib/menu-data'
+import type { Category, MenuItem } from '@/types'
+
+interface MenuData {
+  categories: Category[]
+  items: MenuItem[]
+  settings?: { name?: string; isOpen?: boolean } | null
+  fallback?: boolean
+}
 
 export default function MenuPage() {
   const params = useParams()
@@ -13,172 +21,87 @@ export default function MenuPage() {
   const { addItem, totalItems, subtotal, setTable } = useCart()
   const [activeCategory, setActiveCategory] = useState('all')
   const [addedMap, setAddedMap] = useState<Record<string, boolean>>({})
-  const headerRef = useRef<HTMLElement>(null)
+  const [menuData, setMenuData] = useState<MenuData>({ categories: [], items: [] })
+  const [loading, setLoading] = useState(true)
+  const [error, setError] = useState('')
+  const scrollPosition = useRef(0)
+
+  useEffect(() => setTable(tableId), [setTable, tableId])
 
   useEffect(() => {
-    setTable(tableId)
-  }, [tableId, setTable])
+    async function loadMenu() {
+      try {
+        const response = await fetch('/api/menu')
+        if (!response.ok) throw new Error('Menu belum dapat dimuat.')
+        setMenuData(await response.json())
+      } catch (cause) {
+        setError(cause instanceof Error ? cause.message : 'Menu belum dapat dimuat.')
+      } finally {
+        setLoading(false)
+      }
+    }
+    loadMenu()
+  }, [])
 
-  const filtered =
-    activeCategory === 'all'
-      ? MENU_ITEMS
-      : MENU_ITEMS.filter((m) => m.categoryId === activeCategory)
+  const filtered = useMemo(() => activeCategory === 'all'
+    ? menuData.items
+    : menuData.items.filter((item) => item.categoryId === activeCategory), [activeCategory, menuData.items])
 
-  function handleAdd(item: MenuItem) {
+  function add(item: MenuItem) {
     if (!item.isAvailable) return
     addItem(item)
-    setAddedMap((prev) => ({ ...prev, [item.id]: true }))
-    setTimeout(() => setAddedMap((prev) => ({ ...prev, [item.id]: false })), 800)
+    setAddedMap((current) => ({ ...current, [item.id]: true }))
+    window.setTimeout(() => setAddedMap((current) => ({ ...current, [item.id]: false })), 800)
   }
 
-  // Switch category WITHOUT scrolling to top
-  function handleCategoryChange(catId: string) {
-    const scrollY = window.scrollY
-    setActiveCategory(catId)
-    // Restore scroll position after React re-renders
-    requestAnimationFrame(() => {
-      requestAnimationFrame(() => window.scrollTo({ top: scrollY }))
-    })
+  function changeCategory(categoryId: string) {
+    scrollPosition.current = window.scrollY
+    setActiveCategory(categoryId)
+    requestAnimationFrame(() => requestAnimationFrame(() => window.scrollTo({ top: scrollPosition.current })))
   }
 
-  const tableName = tableId.replace(/-/g, ' ').replace(/\b\w/g, (c) => c.toUpperCase())
+  const tableName = tableId.replace(/-/g, ' ').replace(/\b\w/g, (character) => character.toUpperCase())
+  const cafeName = menuData.settings?.name || 'QR Order Cafe'
 
   return (
-    <div className="min-h-screen bg-stone-50">
-      {/* ── Header ──────────────────────────────────────────────────── */}
-      <header ref={headerRef} className="sticky top-0 z-20 bg-white shadow-sm">
-        <div className="max-w-md mx-auto px-4 py-3 flex items-center justify-between">
-          <div>
-            <h1 className="text-lg font-bold text-stone-900 leading-tight">☕ Menu</h1>
-            <p className="text-xs text-stone-500">{tableName}</p>
-          </div>
-
-          {/* Cart button — always visible, shows count badge */}
-          <Link
-            href="/cart"
-            className="relative flex items-center gap-1.5 bg-amber-500 hover:bg-amber-600 active:scale-95 text-white px-4 py-2 rounded-full text-sm font-semibold transition"
-          >
-            🛒 Cart
-            {totalItems > 0 && (
-              <span className="absolute -top-1.5 -right-1.5 bg-red-500 text-white text-xs w-5 h-5 rounded-full flex items-center justify-center font-bold shadow">
-                {totalItems}
-              </span>
-            )}
-          </Link>
+    <div className="min-h-screen bg-slate-100 pb-32">
+      <header className="bg-[#0f1f33] text-white">
+        <div className="mx-auto flex max-w-5xl items-center justify-between px-4 py-5 sm:px-6">
+          <div><p className="text-xs font-bold uppercase tracking-[0.2em] text-amber-400">{cafeName}</p><h1 className="mt-1 text-2xl font-extrabold tracking-tight">Menu digital</h1><p className="mt-1 text-sm text-slate-300">Pesanan untuk {tableName}</p></div>
+          <Link href="/cart" className="relative rounded-xl border border-white/15 bg-white/10 px-4 py-3 text-sm font-bold transition hover:bg-white/15">Keranjang{totalItems > 0 ? <span className="absolute -right-2 -top-2 grid h-6 min-w-6 place-items-center rounded-full bg-amber-500 px-1 text-xs text-slate-950">{totalItems}</span> : null}</Link>
         </div>
       </header>
 
-      {/* ── Category tabs ────────────────────────────────────────────
-           Use overflow-x-auto with -scrollbar hidden to prevent layout shift.
-           Height is fixed with py-2 to avoid reflow. ──────────────── */}
-      <div className="sticky top-[57px] z-10 bg-white border-b border-stone-100 shadow-sm">
-        <div
-          className="max-w-md mx-auto px-4 overflow-x-auto"
-          style={{ scrollbarWidth: 'none', WebkitOverflowScrolling: 'touch' } as React.CSSProperties}
-        >
-          <div className="flex gap-2 py-2 w-max min-w-full">
-            <button
-              onClick={() => handleCategoryChange('all')}
-              className={`flex-shrink-0 px-4 py-1.5 rounded-full text-sm font-medium transition-colors ${
-                activeCategory === 'all'
-                  ? 'bg-amber-500 text-white'
-                  : 'bg-stone-100 text-stone-600 hover:bg-stone-200'
-              }`}
-            >
-              Semua
-            </button>
-            {CATEGORIES.map((cat) => (
-              <button
-                key={cat.id}
-                onClick={() => handleCategoryChange(cat.id)}
-                className={`flex-shrink-0 px-4 py-1.5 rounded-full text-sm font-medium transition-colors ${
-                  activeCategory === cat.id
-                    ? 'bg-amber-500 text-white'
-                    : 'bg-stone-100 text-stone-600 hover:bg-stone-200'
-                }`}
-              >
-                {cat.name}
-              </button>
-            ))}
-          </div>
+      <div className="sticky top-0 z-20 border-b border-slate-200 bg-white/95 shadow-sm backdrop-blur">
+        <div className="mx-auto flex max-w-5xl gap-2 overflow-x-auto px-4 py-3 sm:px-6">
+          <button onClick={() => changeCategory('all')} className={`shrink-0 rounded-full px-4 py-2 text-sm font-semibold transition ${activeCategory === 'all' ? 'bg-amber-500 text-slate-950' : 'bg-slate-100 text-slate-600 hover:bg-slate-200'}`}>Semua</button>
+          {menuData.categories.map((category) => <button key={category.id} onClick={() => changeCategory(category.id)} className={`shrink-0 rounded-full px-4 py-2 text-sm font-semibold transition ${activeCategory === category.id ? 'bg-amber-500 text-slate-950' : 'bg-slate-100 text-slate-600 hover:bg-slate-200'}`}>{category.name}</button>)}
         </div>
       </div>
 
-      {/* ── Menu items ───────────────────────────────────────────────
-           min-h-[60vh] prevents layout shift when switching to a small category ── */}
-      <main className="max-w-md mx-auto px-4 py-4 pb-32 min-h-[60vh]">
-        <div className="space-y-3">
-          {filtered.map((item) => (
-            <div
-              key={item.id}
-              className={`bg-white rounded-xl shadow-sm border border-stone-100 p-4 flex items-start gap-3 ${
-                !item.isAvailable ? 'opacity-50' : ''
-              }`}
-            >
-              <div className="text-4xl select-none w-10 text-center flex-shrink-0">
-                {item.imageEmoji}
-              </div>
-              <div className="flex-1 min-w-0">
-                <p className="font-semibold text-stone-900 text-sm leading-tight">{item.name}</p>
-                <p className="text-xs text-stone-500 mt-0.5 line-clamp-2 leading-relaxed">
-                  {item.description}
-                </p>
-                {!item.isAvailable && (
-                  <span className="text-xs text-red-500 font-medium mt-1 block">
-                    Tidak tersedia
-                  </span>
-                )}
-                <div className="flex items-center justify-between mt-2.5">
-                  <p className="font-bold text-amber-600 text-sm">{formatRupiah(item.price)}</p>
-                  <button
-                    onClick={() => handleAdd(item)}
-                    disabled={!item.isAvailable}
-                    className={`px-3 py-1.5 rounded-lg text-xs font-semibold transition select-none ${
-                      !item.isAvailable
-                        ? 'bg-stone-200 text-stone-400 cursor-not-allowed'
-                        : addedMap[item.id]
-                        ? 'bg-green-500 text-white scale-95'
-                        : 'bg-amber-500 hover:bg-amber-600 active:scale-95 text-white'
-                    }`}
-                  >
-                    {addedMap[item.id] ? '✓ Ditambah' : '+ Tambah'}
-                  </button>
+      <main className="mx-auto min-h-[65vh] max-w-5xl px-4 py-6 sm:px-6">
+        <div className="mb-5 flex items-end justify-between"><div><h2 className="text-xl font-extrabold text-slate-950">Pilih menu favorit</h2><p className="mt-1 text-sm text-slate-500">Harga sudah diperbarui langsung dari katalog.</p></div><p className="hidden text-sm font-semibold text-slate-500 sm:block">{filtered.length} menu</p></div>
+
+        {loading ? <div className="grid grid-cols-2 gap-3 sm:gap-4 md:grid-cols-3">{[1, 2, 3, 4, 5, 6].map((item) => <div key={item} className="h-64 animate-pulse rounded-2xl border border-slate-200 bg-white sm:h-80" />)}</div> : null}
+        {!loading && (error || menuData.fallback || filtered.length === 0) ? <div className="rounded-2xl border border-slate-200 bg-white px-6 py-16 text-center"><div className="mx-auto grid h-14 w-14 place-items-center rounded-2xl bg-slate-100 font-black text-slate-400">MENU</div><p className="mt-4 font-bold text-slate-800">{error || 'Menu belum tersedia'}</p><p className="mt-1 text-sm text-slate-500">Silakan hubungi staf cafe untuk bantuan.</p></div> : null}
+
+        {!loading && !error && filtered.length > 0 ? (
+          <div className="grid grid-cols-2 gap-3 sm:gap-4 md:grid-cols-3">
+            {filtered.map((item, index) => (
+              <article key={item.id} className={`overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm transition hover:-translate-y-0.5 hover:shadow-md ${!item.isAvailable ? 'opacity-60' : ''}`}>
+                <MenuImage src={item.imageUrl} alt={item.name} fallback={item.imageEmoji} className="aspect-square w-full sm:aspect-[4/3]" priority={index < 4} />
+                <div className="p-3 sm:p-4">
+                  <div className="flex items-start justify-between gap-3"><div><h3 className="line-clamp-2 text-sm font-bold leading-5 text-slate-950 sm:text-base">{item.name}</h3><p className="mt-1 line-clamp-2 min-h-9 text-xs leading-4 text-slate-500 sm:min-h-10 sm:text-sm sm:leading-5">{item.description || 'Menu pilihan cafe.'}</p></div></div>
+                  <div className="mt-3 flex flex-col gap-2 sm:mt-4 sm:flex-row sm:items-center sm:justify-between sm:gap-3"><div><p className="text-sm font-extrabold text-amber-700 sm:text-base">{formatRupiah(item.price)}</p><p className={`mt-1 text-[11px] font-semibold sm:text-xs ${item.isAvailable ? 'text-emerald-600' : 'text-red-600'}`}>{item.isAvailable ? 'Tersedia' : 'Tidak tersedia'}</p></div><button onClick={() => add(item)} disabled={!item.isAvailable} className={`min-h-10 rounded-xl px-3 text-xs font-bold transition sm:min-h-11 sm:px-4 sm:text-sm ${!item.isAvailable ? 'cursor-not-allowed bg-slate-100 text-slate-400' : addedMap[item.id] ? 'bg-emerald-600 text-white' : 'bg-amber-500 text-slate-950 hover:bg-amber-400 active:scale-95'}`}>{addedMap[item.id] ? 'Ditambahkan' : 'Tambah'}</button></div>
                 </div>
-              </div>
-            </div>
-          ))}
-        </div>
+              </article>
+            ))}
+          </div>
+        ) : null}
       </main>
 
-      {/* ── Sticky bottom nav ────────────────────────────────────────
-           Slide in from bottom when first item is added ───────────── */}
-      <div
-        className={`fixed bottom-0 left-0 right-0 z-20 transition-transform duration-300 ${
-          totalItems > 0 ? 'translate-y-0' : 'translate-y-full'
-        }`}
-      >
-        <div className="bg-white border-t border-stone-200 shadow-lg p-3">
-          <div className="max-w-md mx-auto flex items-center gap-2">
-            <div className="flex-1 min-w-0">
-              <p className="text-xs text-stone-500 leading-none">{totalItems} item</p>
-              <p className="font-bold text-stone-900 text-sm mt-0.5 truncate">
-                {formatRupiah(subtotal)}
-              </p>
-            </div>
-            <Link
-              href="/cart"
-              className="flex-shrink-0 bg-stone-100 hover:bg-stone-200 active:scale-95 text-stone-800 px-3 py-2.5 rounded-xl text-sm font-semibold transition"
-            >
-              🛒 Cart
-            </Link>
-            <Link
-              href="/checkout"
-              className="flex-shrink-0 bg-amber-500 hover:bg-amber-600 active:scale-95 text-white px-4 py-2.5 rounded-xl text-sm font-bold transition"
-            >
-              Checkout →
-            </Link>
-          </div>
-        </div>
+      <div className={`fixed inset-x-0 bottom-0 z-30 border-t border-slate-200 bg-white p-3 shadow-[0_-10px_30px_rgba(15,31,51,0.1)] transition-transform ${totalItems > 0 ? 'translate-y-0' : 'translate-y-full'}`}>
+        <div className="mx-auto flex max-w-xl items-center gap-4"><div className="min-w-0 flex-1"><p className="text-xs font-medium text-slate-500">{totalItems} item dalam keranjang</p><p className="mt-0.5 truncate font-extrabold text-slate-950">{formatRupiah(subtotal)}</p></div><Link href="/cart" className="rounded-xl bg-[#0f1f33] px-5 py-3 text-sm font-bold text-white transition hover:bg-slate-800">Lihat keranjang</Link></div>
       </div>
     </div>
   )

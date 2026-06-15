@@ -1,5 +1,13 @@
 import type { Metadata } from 'next'
+import { Plus_Jakarta_Sans } from 'next/font/google'
 import './globals.css'
+import { SessionProviderWrapper } from '@/components/SessionProviderWrapper'
+
+const jakarta = Plus_Jakarta_Sans({
+  subsets: ['latin'],
+  display: 'swap',
+  variable: '--font-jakarta',
+})
 
 export const metadata: Metadata = {
   title: 'QR Order System',
@@ -12,8 +20,10 @@ export default function RootLayout({
   children: React.ReactNode
 }) {
   return (
-    <html lang="id">
-      <body>{children}</body>
+    <html lang="id" className={jakarta.variable}>
+      <body>
+        <SessionProviderWrapper>{children}</SessionProviderWrapper>
+      </body>
     </html>
   )
 }

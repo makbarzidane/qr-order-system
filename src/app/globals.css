@@ -3,17 +3,68 @@
 @tailwind utilities;
 
 @layer base {
+  :root {
+    color-scheme: light;
+  }
+
+  * {
+    box-sizing: border-box;
+  }
+
   html {
-    font-family: system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+    font-family: var(--font-jakarta), system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+    scroll-behavior: smooth;
   }
 
   body {
-    @apply bg-stone-50 text-stone-900;
+    @apply m-0 bg-[#f5f7fb] text-slate-950 antialiased;
+    font-feature-settings: 'cv02', 'cv03', 'cv04', 'cv11';
+  }
+
+  button,
+  input,
+  select,
+  textarea {
+    font: inherit;
+  }
+
+  button,
+  a {
+    -webkit-tap-highlight-color: transparent;
   }
 }
 
 @layer utilities {
   .scrollbar-thin {
     scrollbar-width: thin;
+  }
+
+  .surface-grid {
+    background-image:
+      radial-gradient(circle at 18px 18px, rgba(15, 23, 42, 0.035) 1px, transparent 0),
+      linear-gradient(180deg, rgba(255, 255, 255, 0.65), rgba(248, 250, 252, 0));
+    background-size: 36px 36px, 100% 100%;
+  }
+
+  .focus-ring {
+    @apply focus:outline-none focus:ring-4 focus:ring-amber-500/20;
+  }
+}
+
+@media print {
+  body {
+    background: white !important;
+  }
+
+  .no-print {
+    display: none !important;
+  }
+
+  .print-sheet {
+    margin: 0 !important;
+    max-width: none !important;
+    border: 0 !important;
+    border-radius: 0 !important;
+    box-shadow: none !important;
   }
 }

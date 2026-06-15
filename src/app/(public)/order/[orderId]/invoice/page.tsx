@@ -1,164 +1,43 @@
 'use client'
 
-import { useEffect, useState } from 'react'
 import Link from 'next/link'
 import { useParams } from 'next/navigation'
-import { Order } from '@/types'
+import { useEffect, useState } from 'react'
 import { formatRupiah } from '@/lib/menu-data'
+import type { Order } from '@/types'
 
-const METHOD_LABELS: Record<string, string> = {
-  CASH: 'Cash',
-  QRIS: 'QRIS',
-  TRANSFER: 'Transfer Bank',
-  DEBIT_EDC: 'Debit / EDC',
-}
+const labels: Record<string, string> = { CASH: 'Tunai', QRIS: 'QRIS', TRANSFER: 'Transfer bank', DEBIT_EDC: 'Debit / EDC' }
 
 export default function InvoicePage() {
   const params = useParams()
   const orderId = params.orderId as string
   const [order, setOrder] = useState<Order | null>(null)
-  const [loading, setLoading] = useState(true)
   const [error, setError] = useState('')
 
   useEffect(() => {
-    fetch(`/api/orders/${orderId}`)
-      .then((r) => r.json())
-      .then((data) => {
-        if (data.error) {
-          setError(data.error)
-        } else if (data.paymentStatus !== 'PAID') {
-          setError('Invoice hanya tersedia setelah pembayaran dikonfirmasi.')
-        } else {
-          setOrder(data)
-        }
-      })
-      .catch(() => setError('Gagal memuat invoice.'))
-      .finally(() => setLoading(false))
+    fetch(`/api/orders/${orderId}`).then(async (response) => {
+      const data = await response.json()
+      if (!response.ok) throw new Error(data.error || 'Gagal memuat invoice.')
+      setOrder(data)
+    }).catch((cause) => setError(cause instanceof Error ? cause.message : 'Gagal memuat invoice.'))
   }, [orderId])
 
-  if (loading) {
-    return (
-      <div className="min-h-screen flex items-center justify-center bg-stone-50">
-        <p className="text-stone-500">Memuat...</p>
-      </div>
-    )
-  }
+  if (error) return <main className="grid min-h-screen place-items-center bg-slate-100"><p className="text-sm text-red-600">{error}</p></main>
+  if (!order) return <main className="grid min-h-screen place-items-center bg-slate-100"><p className="text-sm text-slate-500">Memuat invoice...</p></main>
 
-  if (error || !order) {
-    return (
-      <div className="min-h-screen flex flex-col items-center justify-center gap-4 bg-stone-50 px-4">
-        <p className="text-5xl">🔒</p>
-        <p className="text-stone-600 text-center">{error || 'Invoice tidak tersedia.'}</p>
-        <Link href={`/order/${orderId}/status`} className="text-amber-600 font-semibold">
-          Lihat Status Order
-        </Link>
-      </div>
-    )
-  }
-
-  const paidDate = order.paidAt
-    ? new Date(order.paidAt).toLocaleString('id-ID', {
-        timeZone: 'Asia/Jakarta',
-        dateStyle: 'long',
-        timeStyle: 'short',
-      })
-    : '-'
-
+  const paid = order.paymentStatus === 'PAID'
   return (
-    <div className="min-h-screen bg-stone-100 flex items-start justify-center py-8 px-4">
-      <div
-        id="invoice"
-        className="bg-white w-full max-w-sm rounded-2xl shadow-lg overflow-hidden"
-      >
-        {/* Header */}
-        <div className="bg-amber-500 px-6 py-5 text-white text-center">
-          <p className="text-2xl font-black tracking-tight">☕ QR Order</p>
-          <p className="text-xs opacity-80 mt-0.5">Terima kasih sudah memesan!</p>
+    <main className="min-h-screen bg-slate-100 px-4 py-8 sm:px-6">
+      <section className="print-sheet mx-auto max-w-3xl overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-xl">
+        <header className="flex flex-col gap-5 border-b-4 border-amber-500 bg-[#0f1f33] px-6 py-7 text-white sm:flex-row sm:items-center sm:justify-between"><div><p className="text-xs font-bold uppercase tracking-[0.24em] text-amber-400">QR Order Cafe</p><h1 className="mt-2 text-2xl font-black">Invoice pembayaran</h1><p className="mt-1 text-sm text-slate-400">Bukti transaksi digital</p></div><div className="text-left sm:text-right"><span className={`inline-flex rounded-lg border px-3 py-1.5 text-xs font-bold ${paid ? 'border-emerald-400/30 bg-emerald-400/10 text-emerald-300' : 'border-amber-400/30 bg-amber-400/10 text-amber-300'}`}>{paid ? 'PAID' : 'UNPAID'}</span><p className="mt-3 text-lg font-black">{order.orderNumber}</p></div></header>
+        <div className="p-6 sm:p-8">
+          <div className="grid gap-5 border-b border-slate-200 pb-6 sm:grid-cols-3"><div><p className="text-xs font-bold uppercase tracking-wide text-slate-400">Pelanggan</p><p className="mt-1 font-bold text-slate-950">{order.customerName}</p><p className="mt-1 text-sm capitalize text-slate-500">{order.tableId.replace(/-/g, ' ') || '-'}</p></div><div><p className="text-xs font-bold uppercase tracking-wide text-slate-400">Waktu transaksi</p><p className="mt-1 text-sm font-semibold text-slate-950">Order: {new Date(order.createdAt).toLocaleString('id-ID', { timeZone: 'Asia/Jakarta' })}</p><p className="mt-1 text-sm text-slate-500">Bayar: {order.paidAt ? new Date(order.paidAt).toLocaleString('id-ID', { timeZone: 'Asia/Jakarta' }) : 'Belum dibayar'}</p></div><div className="sm:text-right"><p className="text-xs font-bold uppercase tracking-wide text-slate-400">Nomor antrean</p><p className="mt-1 text-4xl font-black text-amber-600">{order.queueNumber ? `#${order.queueNumber}` : '-'}</p><p className="mt-1 text-sm text-slate-500">{labels[order.paymentMethod] || order.paymentMethod}</p></div></div>
+          <div className="mt-6 overflow-x-auto"><table className="w-full min-w-[560px] text-sm"><thead className="bg-slate-950 text-left text-xs uppercase tracking-wide text-white"><tr><th className="px-4 py-3">Menu</th><th className="px-4 py-3 text-center">Qty</th><th className="px-4 py-3 text-right">Harga</th><th className="px-4 py-3 text-right">Jumlah</th></tr></thead><tbody className="divide-y divide-slate-100">{order.items.map((item) => <tr key={item.id}><td className="px-4 py-4"><p className="font-semibold text-slate-950">{item.nameSnapshot}</p>{item.note ? <p className="mt-1 text-xs text-slate-400">{item.note}</p> : null}</td><td className="px-4 py-4 text-center text-slate-600">{item.quantity}</td><td className="px-4 py-4 text-right text-slate-600">{formatRupiah(item.priceSnapshot)}</td><td className="px-4 py-4 text-right font-semibold text-slate-950">{formatRupiah(item.lineTotal)}</td></tr>)}</tbody></table></div>
+          <div className="mt-6 ml-auto max-w-sm rounded-2xl border border-slate-200 p-5"><div className="flex justify-between text-sm text-slate-500"><span>Subtotal</span><span>{formatRupiah(order.subtotal)}</span></div>{(order.discountAmount ?? 0) > 0 ? <div className="mt-2 flex justify-between text-sm text-emerald-700"><span>Diskon {order.discountName}</span><span>-{formatRupiah(order.discountAmount ?? 0)}</span></div> : null}<div className="mt-4 flex justify-between border-t border-slate-200 pt-4 text-xl font-black text-slate-950"><span>Total</span><span>{formatRupiah(order.total)}</span></div></div>
+          <p className="mt-8 text-center text-sm text-slate-500">Terima kasih atas kunjungan Anda. Simpan invoice ini sebagai bukti pembayaran.</p>
         </div>
-
-        <div className="px-6 py-4 space-y-4">
-          {/* Invoice meta */}
-          <div className="flex justify-between text-xs text-stone-500 border-b border-dashed border-stone-200 pb-3">
-            <div>
-              <p className="font-semibold text-stone-700">{order.orderNumber}</p>
-              <p>{paidDate}</p>
-            </div>
-            <div className="text-right">
-              {order.queueNumber && (
-                <div>
-                  <p>Antrian</p>
-                  <p className="text-2xl font-black text-amber-500 leading-none">
-                    {order.queueNumber}
-                  </p>
-                </div>
-              )}
-            </div>
-          </div>
-
-          {/* Customer */}
-          <div className="text-sm">
-            <p className="text-stone-500 text-xs">Pelanggan</p>
-            <p className="font-semibold text-stone-900">{order.customerName}</p>
-          </div>
-
-          {/* Items */}
-          <div>
-            <p className="text-xs text-stone-500 mb-2">Pesanan</p>
-            <div className="space-y-1.5">
-              {order.items.map((item) => (
-                <div key={item.id} className="flex justify-between text-sm">
-                  <div>
-                    <span className="text-stone-800">{item.nameSnapshot}</span>
-                    <span className="text-stone-400 ml-1">× {item.quantity}</span>
-                  </div>
-                  <span className="font-medium text-stone-900">
-                    {formatRupiah(item.lineTotal)}
-                  </span>
-                </div>
-              ))}
-            </div>
-          </div>
-
-          {/* Total */}
-          <div className="border-t border-dashed border-stone-200 pt-3">
-            <div className="flex justify-between font-bold text-base">
-              <span>Total</span>
-              <span className="text-amber-600">{formatRupiah(order.total)}</span>
-            </div>
-            <div className="flex justify-between text-xs text-stone-500 mt-1">
-              <span>Pembayaran</span>
-              <span>{METHOD_LABELS[order.paymentMethod] ?? order.paymentMethod}</span>
-            </div>
-          </div>
-
-          {/* Status */}
-          <div className="bg-green-50 border border-green-100 rounded-xl p-3 text-center">
-            <p className="text-green-700 font-semibold text-sm">✅ Lunas</p>
-          </div>
-        </div>
-
-        {/* Footer */}
-        <div className="px-6 py-4 bg-stone-50 border-t border-stone-100 text-center">
-          <p className="text-xs text-stone-400">
-            Simpan struk ini sebagai bukti pembayaran.
-          </p>
-          <button
-            onClick={() => window.print()}
-            className="mt-3 w-full bg-amber-500 hover:bg-amber-600 text-white py-2.5 rounded-xl font-semibold text-sm transition"
-          >
-            🖨️ Print / Simpan PDF
-          </button>
-        </div>
-      </div>
-
-      <div className="fixed bottom-4 left-0 right-0 text-center">
-        <Link
-          href={`/order/${orderId}/status`}
-          className="text-sm text-stone-500 hover:text-stone-700 bg-white px-4 py-2 rounded-full shadow"
-        >
-          ← Kembali ke Status
-        </Link>
-      </div>
-    </div>
+        <footer className="no-print flex flex-col gap-3 border-t border-slate-200 bg-slate-50 p-5 sm:flex-row"><button onClick={() => window.print()} disabled={!paid} className="flex-1 rounded-xl bg-amber-500 px-5 py-3 text-sm font-extrabold text-slate-950 disabled:cursor-not-allowed disabled:opacity-50">Print / Simpan PDF</button><Link href={`/order/${orderId}/status`} className="flex-1 rounded-xl border border-slate-200 bg-white px-5 py-3 text-center text-sm font-bold text-slate-700">Kembali ke status</Link></footer>
+      </section>
+    </main>
   )
 }

@@ -1,17 +1,17 @@
 'use client'
 
-import { useState, useEffect, useRef } from 'react'
-import { useRouter } from 'next/navigation'
 import Link from 'next/link'
+import { useRouter } from 'next/navigation'
+import { FormEvent, useEffect, useRef, useState } from 'react'
 import { useCart } from '@/contexts/CartContext'
 import { formatRupiah } from '@/lib/menu-data'
-import { PaymentMethod } from '@/types'
+import type { PaymentMethod } from '@/types'
 
-const PAYMENT_METHODS: { value: PaymentMethod; label: string; icon: string; desc: string }[] = [
-  { value: 'CASH', label: 'Cash', icon: '💵', desc: 'Bayar tunai di kasir' },
-  { value: 'QRIS', label: 'QRIS', icon: '📱', desc: 'Scan QR code pembayaran' },
-  { value: 'TRANSFER', label: 'Transfer Bank', icon: '🏦', desc: 'Transfer manual dikonfirmasi kasir' },
-  { value: 'DEBIT_EDC', label: 'Debit / EDC', icon: '💳', desc: 'Kartu debit via mesin EDC' },
+const methods: { value: PaymentMethod; label: string; description: string; code: string }[] = [
+  { value: 'CASH', label: 'Tunai', description: 'Bayar langsung di kasir', code: 'Rp' },
+  { value: 'QRIS', label: 'QRIS', description: 'Scan pembayaran di kasir', code: 'QR' },
+  { value: 'TRANSFER', label: 'Transfer bank', description: 'Dikonfirmasi oleh kasir', code: 'TR' },
+  { value: 'DEBIT_EDC', label: 'Debit / EDC', description: 'Bayar menggunakan kartu', code: 'DC' },
 ]
 
 export default function CheckoutPage() {
@@ -19,218 +19,64 @@ export default function CheckoutPage() {
   const { state, subtotal, clearCart, isHydrated } = useCart()
   const [customerName, setCustomerName] = useState('')
   const [paymentMethod, setPaymentMethod] = useState<PaymentMethod | ''>('')
-  const [nameError, setNameError] = useState('')
-  const [methodError, setMethodError] = useState('')
-  const [isSubmitting, setIsSubmitting] = useState(false)
+  const [discountCode, setDiscountCode] = useState('')
+  const [error, setError] = useState('')
+  const [submitting, setSubmitting] = useState(false)
+  const checked = useRef(false)
 
-  // Track whether we already checked — prevents clearCart() from re-triggering
-  // the guard after items are cleared during successful order submission
-  const guardChecked = useRef(false)
-
-  // Guard: only redirect when cart is ACTUALLY empty (not after we submitted)
-  // useRef ensures this only fires on first hydration, not on every items change
   useEffect(() => {
-    if (!isHydrated || guardChecked.current) return
-    guardChecked.current = true
-    if (state.items.length === 0) {
-      router.replace('/cart')
-    }
-    // DO NOT add state.items.length to deps — we only want to check once on mount
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [isHydrated])
+    if (!isHydrated || checked.current) return
+    checked.current = true
+    if (state.items.length === 0) router.replace('/cart')
+  }, [isHydrated, router, state.items.length])
 
-  // Loading / redirect in progress
-  if (!isHydrated || (!guardChecked.current && state.items.length === 0)) {
-    return (
-      <div className="min-h-screen bg-stone-50 flex items-center justify-center">
-        <div className="text-center">
-          <p className="text-3xl mb-3">🛒</p>
-          <p className="text-stone-400 text-sm">Memuat...</p>
-        </div>
-      </div>
-    )
-  }
+  if (!isHydrated || state.items.length === 0) return <div className="grid min-h-screen place-items-center bg-slate-100 text-sm text-slate-500">Menyiapkan checkout...</div>
 
-  // Cart actually empty after hydration — will be redirected by useEffect
-  if (isHydrated && guardChecked.current && state.items.length === 0) {
-    return (
-      <div className="min-h-screen bg-stone-50 flex items-center justify-center">
-        <div className="text-center">
-          <p className="text-3xl mb-3">🛒</p>
-          <p className="text-stone-400 text-sm">Cart kosong. Mengarahkan ke Cart...</p>
-        </div>
-      </div>
-    )
-  }
+  async function submit(event: FormEvent) {
+    event.preventDefault()
+    setError('')
+    if (!customerName.trim()) return setError('Nama pelanggan wajib diisi.')
+    if (!paymentMethod) return setError('Pilih metode pembayaran.')
 
-  async function handleSubmit(e: React.FormEvent) {
-    e.preventDefault()
-    setNameError('')
-    setMethodError('')
-
-    let valid = true
-    if (!customerName.trim()) {
-      setNameError('Nama pelanggan wajib diisi sebelum checkout.')
-      valid = false
-    }
-    if (!paymentMethod) {
-      setMethodError('Pilih metode pembayaran.')
-      valid = false
-    }
-    if (!valid) return
-
-    setIsSubmitting(true)
+    setSubmitting(true)
     try {
-      const res = await fetch('/api/orders', {
+      const response = await fetch('/api/orders', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           customerName: customerName.trim(),
           tableId: state.tableId,
           paymentMethod,
+          discountCode: discountCode.trim() || undefined,
           items: state.items,
         }),
       })
-
-      if (!res.ok) {
-        const data = await res.json()
-        throw new Error(data.error || 'Gagal membuat order.')
-      }
-
-      const order = await res.json()
-
-      // Save orderId to localStorage so status page can recover if needed
-      try {
-        localStorage.setItem('lastOrderId', order.id)
-        localStorage.setItem('lastOrder', JSON.stringify(order))
-      } catch {
-        // ignore
-      }
-
-      // Clear cart FIRST, then navigate — this way the clearCart dispatch
-      // doesn't race with the navigate when both try to update CartContext
+      const order = await response.json()
+      if (!response.ok) throw new Error(order.error || 'Gagal membuat order.')
+      localStorage.setItem('lastOrderId', order.id)
+      localStorage.setItem('lastOrder', JSON.stringify(order))
       clearCart()
-
-      // Small timeout to let React flush the clearCart state update
-      // before unmounting checkout (prevents guard useEffect re-firing on items change)
-      await new Promise((r) => setTimeout(r, 50))
+      await new Promise((resolve) => setTimeout(resolve, 50))
       router.push(`/order/${order.id}/status`)
-    } catch (err: unknown) {
-      const msg = err instanceof Error ? err.message : 'Terjadi kesalahan.'
-      setNameError(msg)
-      setIsSubmitting(false)
+    } catch (cause) {
+      setError(cause instanceof Error ? cause.message : 'Terjadi kesalahan.')
+      setSubmitting(false)
     }
   }
 
   return (
-    <div className="min-h-screen bg-stone-50">
-      <header className="sticky top-0 z-10 bg-white shadow-sm">
-        <div className="max-w-md mx-auto px-4 py-3 flex items-center gap-3">
-          <Link href="/cart" className="text-stone-500 hover:text-stone-700 text-sm">
-            ← Keranjang
-          </Link>
-          <h1 className="font-bold text-stone-900">Checkout</h1>
-        </div>
-      </header>
-
-      <form onSubmit={handleSubmit}>
-        <main className="max-w-md mx-auto px-4 py-4 space-y-4 pb-32">
-          {/* Order summary */}
-          <div className="bg-white rounded-xl shadow-sm border border-stone-100 p-4">
-            <h2 className="font-semibold text-stone-900 mb-3 text-sm">Ringkasan Order</h2>
-            <div className="space-y-2">
-              {state.items.map((ci) => (
-                <div key={ci.menuItem.id} className="flex justify-between text-sm">
-                  <span className="text-stone-600">
-                    {ci.menuItem.name} × {ci.quantity}
-                  </span>
-                  <span className="font-medium text-stone-900">
-                    {formatRupiah(ci.menuItem.price * ci.quantity)}
-                  </span>
-                </div>
-              ))}
-              <div className="border-t border-stone-100 pt-2 flex justify-between font-bold">
-                <span>Total</span>
-                <span className="text-amber-600">{formatRupiah(subtotal)}</span>
-              </div>
-            </div>
+    <div className="min-h-screen bg-slate-100 pb-28">
+      <header className="sticky top-0 z-20 border-b border-slate-800 bg-[#0f1f33] text-white"><div className="mx-auto flex max-w-3xl items-center gap-4 px-4 py-4 sm:px-6"><Link href="/cart" className="rounded-lg border border-white/15 px-3 py-2 text-sm font-semibold">Kembali</Link><div><h1 className="font-extrabold">Checkout</h1><p className="text-xs text-slate-400">Lengkapi informasi pemesan</p></div></div></header>
+      <form onSubmit={submit}>
+        <main className="mx-auto grid max-w-3xl gap-5 px-4 py-6 sm:px-6 lg:grid-cols-[1fr_0.9fr]">
+          <div className="space-y-5">
+            <section className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm"><h2 className="font-bold text-slate-950">Informasi pemesan</h2><label className="mt-4 block text-sm font-semibold text-slate-700">Nama pelanggan<input autoFocus value={customerName} onChange={(event) => setCustomerName(event.target.value)} placeholder="Nama untuk dipanggil" className="mt-2 w-full rounded-xl border border-slate-200 px-3.5 py-3 text-sm outline-none focus:border-amber-500 focus:ring-4 focus:ring-amber-500/10" /></label><div className="mt-4 rounded-xl bg-slate-50 p-3 text-sm"><span className="text-slate-500">Meja</span><span className="float-right font-bold capitalize text-slate-950">{state.tableId.replace(/-/g, ' ')}</span></div></section>
+            <section className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm"><h2 className="font-bold text-slate-950">Metode pembayaran</h2><div className="mt-4 grid gap-3">{methods.map((method) => <label key={method.value} className={`flex cursor-pointer items-center gap-3 rounded-xl border p-3 transition ${paymentMethod === method.value ? 'border-amber-500 bg-amber-50' : 'border-slate-200 hover:border-slate-300'}`}><input type="radio" name="paymentMethod" className="sr-only" checked={paymentMethod === method.value} onChange={() => setPaymentMethod(method.value)} /><span className={`grid h-10 w-10 place-items-center rounded-lg text-xs font-black ${paymentMethod === method.value ? 'bg-amber-500 text-slate-950' : 'bg-slate-100 text-slate-600'}`}>{method.code}</span><span className="flex-1"><span className="block text-sm font-bold text-slate-950">{method.label}</span><span className="block text-xs text-slate-500">{method.description}</span></span><span className={`h-4 w-4 rounded-full border-4 ${paymentMethod === method.value ? 'border-amber-500 bg-white' : 'border-slate-300'}`} /></label>)}</div></section>
+            <section className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm"><label className="text-sm font-bold text-slate-950">Kode promo opsional<input value={discountCode} onChange={(event) => setDiscountCode(event.target.value.toUpperCase())} placeholder="Contoh: HEMAT10" className="mt-3 w-full rounded-xl border border-slate-200 px-3.5 py-3 text-sm uppercase outline-none focus:border-amber-500 focus:ring-4 focus:ring-amber-500/10" /></label><p className="mt-2 text-xs text-slate-500">Promo divalidasi dan dihitung ulang oleh server.</p></section>
           </div>
-
-          {/* Customer name — WAJIB */}
-          <div className="bg-white rounded-xl shadow-sm border border-stone-100 p-4">
-            <label className="block">
-              <span className="font-semibold text-stone-900 text-sm">
-                Nama Pelanggan <span className="text-red-500">*</span>
-              </span>
-              <p className="text-xs text-stone-500 mt-0.5">
-                Nama untuk dipanggil saat pesanan siap.
-              </p>
-              <input
-                type="text"
-                value={customerName}
-                onChange={(e) => {
-                  setCustomerName(e.target.value)
-                  if (nameError) setNameError('')
-                }}
-                placeholder="Masukkan nama kamu..."
-                autoFocus
-                className="mt-2 w-full border border-stone-200 rounded-lg px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-amber-400 focus:border-transparent"
-              />
-            </label>
-            {nameError && <p className="mt-1.5 text-xs text-red-500">{nameError}</p>}
-          </div>
-
-          {/* Payment method */}
-          <div className="bg-white rounded-xl shadow-sm border border-stone-100 p-4">
-            <h2 className="font-semibold text-stone-900 mb-3 text-sm">
-              Metode Pembayaran <span className="text-red-500">*</span>
-            </h2>
-            <div className="space-y-2">
-              {PAYMENT_METHODS.map((m) => (
-                <label
-                  key={m.value}
-                  className={`flex items-center gap-3 p-3 rounded-xl border-2 cursor-pointer transition ${
-                    paymentMethod === m.value
-                      ? 'border-amber-500 bg-amber-50'
-                      : 'border-stone-100 hover:border-stone-200'
-                  }`}
-                >
-                  <input
-                    type="radio"
-                    name="paymentMethod"
-                    value={m.value}
-                    checked={paymentMethod === m.value}
-                    onChange={() => {
-                      setPaymentMethod(m.value)
-                      if (methodError) setMethodError('')
-                    }}
-                    className="sr-only"
-                  />
-                  <span className="text-2xl">{m.icon}</span>
-                  <div className="flex-1">
-                    <p className="font-medium text-stone-900 text-sm">{m.label}</p>
-                    <p className="text-xs text-stone-500">{m.desc}</p>
-                  </div>
-                  {paymentMethod === m.value && (
-                    <span className="text-amber-500 font-bold text-lg">✓</span>
-                  )}
-                </label>
-              ))}
-            </div>
-            {methodError && <p className="mt-1.5 text-xs text-red-500">{methodError}</p>}
-          </div>
+          <section className="h-fit rounded-2xl border border-slate-200 bg-white p-5 shadow-sm lg:sticky lg:top-24"><h2 className="font-bold text-slate-950">Ringkasan pesanan</h2><div className="mt-4 space-y-3">{state.items.map((item) => <div key={item.menuItem.id} className="flex justify-between gap-4 text-sm"><span className="text-slate-600">{item.quantity} x {item.menuItem.name}</span><span className="font-semibold text-slate-950">{formatRupiah(item.menuItem.price * item.quantity)}</span></div>)}</div><div className="mt-5 flex justify-between border-t border-slate-100 pt-4"><span className="font-bold text-slate-950">Subtotal</span><span className="text-xl font-extrabold text-amber-700">{formatRupiah(subtotal)}</span></div>{error ? <p className="mt-4 rounded-xl border border-red-200 bg-red-50 p-3 text-sm font-medium text-red-700">{error}</p> : null}</section>
         </main>
-
-        {/* Sticky submit */}
-        <div className="fixed bottom-0 left-0 right-0 z-20 bg-white border-t border-stone-200 shadow-lg p-3">
-          <button
-            type="submit"
-            disabled={isSubmitting}
-            className="w-full max-w-md mx-auto block bg-amber-500 hover:bg-amber-600 active:scale-[.98] disabled:opacity-60 text-white text-center py-3 rounded-xl font-bold transition"
-          >
-            {isSubmitting ? '⏳ Memproses...' : `Pesan Sekarang — ${formatRupiah(subtotal)}`}
-          </button>
-        </div>
+        <div className="fixed inset-x-0 bottom-0 z-30 border-t border-slate-200 bg-white p-3 shadow-[0_-10px_30px_rgba(15,31,51,0.1)]"><button type="submit" disabled={submitting} className="mx-auto block w-full max-w-3xl rounded-xl bg-amber-500 px-5 py-3.5 text-sm font-extrabold text-slate-950 transition hover:bg-amber-400 disabled:opacity-60">{submitting ? 'Memproses pesanan...' : `Buat pesanan · ${formatRupiah(subtotal)}`}</button></div>
       </form>
     </div>
   )
