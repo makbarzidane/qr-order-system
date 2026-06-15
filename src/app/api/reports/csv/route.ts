@@ -43,7 +43,6 @@ export async function GET(req: NextRequest) {
       .join('\n')
 
     return new NextResponse(csv, {
-      status: 503,
       headers: {
         'Content-Type': 'text/csv; charset=utf-8',
         'Content-Disposition': `attachment; filename="laporan-order-error-${new Date().toISOString().slice(0, 10)}.csv"`,
