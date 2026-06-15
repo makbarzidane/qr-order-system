@@ -25,6 +25,15 @@ function generateOrderNumber() {
   return `ORD-${compactDate}-${crypto.randomUUID().slice(0, 6).toUpperCase()}`
 }
 
+function parseOrderItems(itemsJson: string): OrderItem[] {
+  try {
+    const parsed = JSON.parse(itemsJson)
+    return Array.isArray(parsed) ? parsed as OrderItem[] : []
+  } catch {
+    return []
+  }
+}
+
 function rowToOrder(row: {
   id: string
   orderNumber: string
@@ -51,7 +60,7 @@ function rowToOrder(row: {
     status: row.status as Order['status'],
     paymentStatus: row.paymentStatus as Order['paymentStatus'],
     paymentMethod: row.paymentMethod as PaymentMethod,
-    items: JSON.parse(row.itemsJson) as OrderItem[],
+    items: parseOrderItems(row.itemsJson),
     subtotal: row.subtotal,
     total: row.total,
     discountCode: row.discountCode ?? undefined,

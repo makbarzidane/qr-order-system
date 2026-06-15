@@ -17,6 +17,7 @@ export const MENU_ITEMS: MenuItem[] = [
     category: CATEGORIES[0],
     categoryId: 'cat-1',
     imageEmoji: '☕',
+    imageUrl: 'https://images.unsplash.com/photo-1517701604599-bb29b565090c?auto=format&fit=crop&w=900&q=80',
     isAvailable: true,
   },
   {
@@ -27,6 +28,7 @@ export const MENU_ITEMS: MenuItem[] = [
     category: CATEGORIES[0],
     categoryId: 'cat-1',
     imageEmoji: '🖤',
+    imageUrl: 'https://images.unsplash.com/photo-1514432324607-a09d9b4aefdd?auto=format&fit=crop&w=900&q=80',
     isAvailable: true,
   },
   {
@@ -37,6 +39,7 @@ export const MENU_ITEMS: MenuItem[] = [
     category: CATEGORIES[0],
     categoryId: 'cat-1',
     imageEmoji: '☕',
+    imageUrl: 'https://images.unsplash.com/photo-1572442388796-11668a67e53d?auto=format&fit=crop&w=900&q=80',
     isAvailable: true,
   },
   {
@@ -47,6 +50,7 @@ export const MENU_ITEMS: MenuItem[] = [
     category: CATEGORIES[0],
     categoryId: 'cat-1',
     imageEmoji: '🥛',
+    imageUrl: 'https://images.unsplash.com/photo-1461023058943-07fcbe16d735?auto=format&fit=crop&w=900&q=80',
     isAvailable: true,
   },
   {
@@ -57,6 +61,7 @@ export const MENU_ITEMS: MenuItem[] = [
     category: CATEGORIES[0],
     categoryId: 'cat-1',
     imageEmoji: '☕',
+    imageUrl: 'https://images.unsplash.com/photo-1442512595331-e89e73853f31?auto=format&fit=crop&w=900&q=80',
     isAvailable: true,
   },
   // Non-Kopi
@@ -68,6 +73,7 @@ export const MENU_ITEMS: MenuItem[] = [
     category: CATEGORIES[1],
     categoryId: 'cat-2',
     imageEmoji: '🍵',
+    imageUrl: 'https://images.unsplash.com/photo-1536256263959-770b48d82b0a?auto=format&fit=crop&w=900&q=80',
     isAvailable: true,
   },
   {
@@ -78,6 +84,7 @@ export const MENU_ITEMS: MenuItem[] = [
     category: CATEGORIES[1],
     categoryId: 'cat-2',
     imageEmoji: '🍫',
+    imageUrl: 'https://images.unsplash.com/photo-1542990253-0d0f5be5f0ed?auto=format&fit=crop&w=900&q=80',
     isAvailable: true,
   },
   {
@@ -88,6 +95,7 @@ export const MENU_ITEMS: MenuItem[] = [
     category: CATEGORIES[1],
     categoryId: 'cat-2',
     imageEmoji: '🧋',
+    imageUrl: 'https://images.unsplash.com/photo-1556679343-c7306c1976bc?auto=format&fit=crop&w=900&q=80',
     isAvailable: true,
   },
   {
@@ -98,6 +106,7 @@ export const MENU_ITEMS: MenuItem[] = [
     category: CATEGORIES[1],
     categoryId: 'cat-2',
     imageEmoji: '🥑',
+    imageUrl: 'https://images.unsplash.com/photo-1623065422902-30a2d299bbe4?auto=format&fit=crop&w=900&q=80',
     isAvailable: false,
   },
   // Makanan
@@ -109,6 +118,7 @@ export const MENU_ITEMS: MenuItem[] = [
     category: CATEGORIES[2],
     categoryId: 'cat-3',
     imageEmoji: '🍳',
+    imageUrl: 'https://images.unsplash.com/photo-1603133872878-684f208fb84b?auto=format&fit=crop&w=900&q=80',
     isAvailable: true,
   },
   {
@@ -119,6 +129,7 @@ export const MENU_ITEMS: MenuItem[] = [
     category: CATEGORIES[2],
     categoryId: 'cat-3',
     imageEmoji: '🍜',
+    imageUrl: 'https://images.unsplash.com/photo-1612929633738-8fe44f7ec841?auto=format&fit=crop&w=900&q=80',
     isAvailable: true,
   },
   {
@@ -129,6 +140,7 @@ export const MENU_ITEMS: MenuItem[] = [
     category: CATEGORIES[2],
     categoryId: 'cat-3',
     imageEmoji: '🍞',
+    imageUrl: 'https://images.unsplash.com/photo-1484723091739-30a097e8f929?auto=format&fit=crop&w=900&q=80',
     isAvailable: true,
   },
   // Snack
@@ -140,6 +152,7 @@ export const MENU_ITEMS: MenuItem[] = [
     category: CATEGORIES[3],
     categoryId: 'cat-4',
     imageEmoji: '🍟',
+    imageUrl: 'https://images.unsplash.com/photo-1573080496219-bb080dd4f877?auto=format&fit=crop&w=900&q=80',
     isAvailable: true,
   },
   {
@@ -150,6 +163,7 @@ export const MENU_ITEMS: MenuItem[] = [
     category: CATEGORIES[3],
     categoryId: 'cat-4',
     imageEmoji: '🍌',
+    imageUrl: 'https://images.unsplash.com/photo-1528825871115-3581a5387919?auto=format&fit=crop&w=900&q=80',
     isAvailable: true,
   },
 ]

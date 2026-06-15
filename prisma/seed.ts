@@ -53,11 +53,29 @@ async function main() {
     { id: 'menu-14', name: 'Pisang Goreng Keju', description: 'Pisang goreng dengan keju.', price: 15000, imageEmoji: 'SNACK', categoryId: 'cat-snack', isAvailable: true },
   ]
 
+  const menuImageUrls: Record<string, string> = {
+    'menu-1': 'https://images.unsplash.com/photo-1517701604599-bb29b565090c?auto=format&fit=crop&w=900&q=80',
+    'menu-2': 'https://images.unsplash.com/photo-1514432324607-a09d9b4aefdd?auto=format&fit=crop&w=900&q=80',
+    'menu-3': 'https://images.unsplash.com/photo-1572442388796-11668a67e53d?auto=format&fit=crop&w=900&q=80',
+    'menu-4': 'https://images.unsplash.com/photo-1461023058943-07fcbe16d735?auto=format&fit=crop&w=900&q=80',
+    'menu-5': 'https://images.unsplash.com/photo-1442512595331-e89e73853f31?auto=format&fit=crop&w=900&q=80',
+    'menu-6': 'https://images.unsplash.com/photo-1536256263959-770b48d82b0a?auto=format&fit=crop&w=900&q=80',
+    'menu-7': 'https://images.unsplash.com/photo-1542990253-0d0f5be5f0ed?auto=format&fit=crop&w=900&q=80',
+    'menu-8': 'https://images.unsplash.com/photo-1556679343-c7306c1976bc?auto=format&fit=crop&w=900&q=80',
+    'menu-9': 'https://images.unsplash.com/photo-1623065422902-30a2d299bbe4?auto=format&fit=crop&w=900&q=80',
+    'menu-10': 'https://images.unsplash.com/photo-1603133872878-684f208fb84b?auto=format&fit=crop&w=900&q=80',
+    'menu-11': 'https://images.unsplash.com/photo-1612929633738-8fe44f7ec841?auto=format&fit=crop&w=900&q=80',
+    'menu-12': 'https://images.unsplash.com/photo-1484723091739-30a097e8f929?auto=format&fit=crop&w=900&q=80',
+    'menu-13': 'https://images.unsplash.com/photo-1573080496219-bb080dd4f877?auto=format&fit=crop&w=900&q=80',
+    'menu-14': 'https://images.unsplash.com/photo-1528825871115-3581a5387919?auto=format&fit=crop&w=900&q=80',
+  }
+
   for (const item of items) {
+    const data = { ...item, imageUrl: menuImageUrls[item.id] ?? null }
     await prisma.menuItem.upsert({
       where: { id: item.id },
-      update: { ...item, isActive: true },
-      create: { ...item, isActive: true },
+      update: { ...data, isActive: true },
+      create: { ...data, isActive: true },
     })
   }
 

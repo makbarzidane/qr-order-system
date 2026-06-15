@@ -22,6 +22,8 @@ interface PatchBody {
   status?: Order['status']
 }
 
+const kitchenStatuses = new Set<Order['status']>(['PREPARING', 'READY', 'COMPLETED'])
+
 export async function PATCH(
   req: NextRequest,
   { params }: { params: { id: string } }
@@ -40,6 +42,9 @@ export async function PATCH(
     if (body.action === 'update_status') {
       if (!body.status) {
         return NextResponse.json({ error: 'Status wajib diisi.' }, { status: 400 })
+      }
+      if (!kitchenStatuses.has(body.status)) {
+        return NextResponse.json({ error: 'Status kitchen tidak valid.' }, { status: 400 })
       }
       if (!['ADMIN', 'KITCHEN'].includes(session.user.role)) return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
       const order = await updateKitchenStatus(params.id, body.status, { id: session.user.id, name: session.user.name ?? undefined })

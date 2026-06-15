@@ -1,4 +1,7 @@
+'use client'
+
 import Image from 'next/image'
+import { useState } from 'react'
 
 export function MenuImage({
   src,
@@ -13,7 +16,9 @@ export function MenuImage({
   className?: string
   priority?: boolean
 }) {
-  if (!src) {
+  const [failed, setFailed] = useState(false)
+
+  if (!src || failed) {
     return (
       <div className={`grid place-items-center bg-slate-100 text-sm font-black tracking-[0.16em] text-slate-400 ${className}`}>
         {fallback.slice(0, 8)}
@@ -31,6 +36,7 @@ export function MenuImage({
         className="object-cover"
         priority={priority}
         unoptimized
+        onError={() => setFailed(true)}
       />
     </div>
   )
