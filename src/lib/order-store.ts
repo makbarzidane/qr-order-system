@@ -141,7 +141,10 @@ function confirmMemoryPayment(id: string) {
   if (!order) throw new Error('Order tidak ditemukan.')
   if (order.paymentStatus === 'PAID') throw new Error('Order sudah dibayar dan tidak dapat dikonfirmasi ulang.')
   const key = todayKey()
-  const queueNumber = (memQueueCounters.get(key) ?? 0) + 1
+  const activeKitchenOrders = Array.from(memOrders.values()).filter((item) =>
+    item.paymentStatus === 'PAID' && ['QUEUED', 'PREPARING', 'READY'].includes(item.status)
+  )
+  const queueNumber = activeKitchenOrders.length === 0 ? 1 : (memQueueCounters.get(key) ?? 0) + 1
   memQueueCounters.set(key, queueNumber)
   const updated: Order = { ...order, paymentStatus: 'PAID', status: 'QUEUED', queueNumber, paidAt: new Date().toISOString() }
   memOrders.set(id, updated)
@@ -282,11 +285,20 @@ export async function confirmPayment(id: string, actor?: { id?: string; name?: s
       if (existing.paymentStatus === 'PAID') throw new Error('Order sudah dibayar dan tidak dapat dikonfirmasi ulang.')
       if (existing.paymentStatus !== 'UNPAID' || existing.status !== 'PENDING_PAYMENT') throw new Error('Status order tidak dapat dibayar.')
 
-      const counter = await tx.queueCounter.upsert({
-        where: { dateKey: todayKey() },
-        update: { counter: { increment: 1 } },
-        create: { dateKey: todayKey(), counter: 1 },
+      const activeKitchenOrders = await tx.order.count({
+        where: { paymentStatus: 'PAID', status: { in: ['QUEUED', 'PREPARING', 'READY'] } },
       })
+      const counter = activeKitchenOrders === 0
+        ? await tx.queueCounter.upsert({
+          where: { dateKey: todayKey() },
+          update: { counter: 1 },
+          create: { dateKey: todayKey(), counter: 1 },
+        })
+        : await tx.queueCounter.upsert({
+          where: { dateKey: todayKey() },
+          update: { counter: { increment: 1 } },
+          create: { dateKey: todayKey(), counter: 1 },
+        })
       const updated = await tx.order.update({
         where: { id },
         data: { paymentStatus: 'PAID', status: 'QUEUED', queueNumber: counter.counter, paidAt: new Date(), confirmedById: actor?.id },

@@ -82,17 +82,17 @@ export default function MenuPage() {
       <main className="mx-auto min-h-[65vh] max-w-5xl px-4 py-6 sm:px-6">
         <div className="mb-5 flex items-end justify-between"><div><h2 className="text-xl font-extrabold text-slate-950">Pilih menu favorit</h2><p className="mt-1 text-sm text-slate-500">Harga sudah diperbarui langsung dari katalog.</p></div><p className="hidden text-sm font-semibold text-slate-500 sm:block">{filtered.length} menu</p></div>
 
-        {loading ? <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">{[1, 2, 3, 4, 5, 6].map((item) => <div key={item} className="h-80 animate-pulse rounded-2xl border border-slate-200 bg-white" />)}</div> : null}
+        {loading ? <div className="grid grid-cols-2 gap-3 sm:gap-4 md:grid-cols-3">{[1, 2, 3, 4, 5, 6].map((item) => <div key={item} className="h-64 animate-pulse rounded-2xl border border-slate-200 bg-white sm:h-80" />)}</div> : null}
         {!loading && (error || menuData.fallback || filtered.length === 0) ? <div className="rounded-2xl border border-slate-200 bg-white px-6 py-16 text-center"><div className="mx-auto grid h-14 w-14 place-items-center rounded-2xl bg-slate-100 font-black text-slate-400">MENU</div><p className="mt-4 font-bold text-slate-800">{error || 'Menu belum tersedia'}</p><p className="mt-1 text-sm text-slate-500">Silakan hubungi staf cafe untuk bantuan.</p></div> : null}
 
         {!loading && !error && filtered.length > 0 ? (
-          <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
+          <div className="grid grid-cols-2 gap-3 sm:gap-4 md:grid-cols-3">
             {filtered.map((item, index) => (
               <article key={item.id} className={`overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm transition hover:-translate-y-0.5 hover:shadow-md ${!item.isAvailable ? 'opacity-60' : ''}`}>
-                <MenuImage src={item.imageUrl} alt={item.name} fallback={item.imageEmoji} className="aspect-[4/3] w-full" priority={index < 3} />
-                <div className="p-4">
-                  <div className="flex items-start justify-between gap-3"><div><h3 className="font-bold text-slate-950">{item.name}</h3><p className="mt-1 line-clamp-2 min-h-10 text-sm leading-5 text-slate-500">{item.description || 'Menu pilihan cafe.'}</p></div></div>
-                  <div className="mt-4 flex items-center justify-between gap-3"><div><p className="font-extrabold text-amber-700">{formatRupiah(item.price)}</p><p className={`mt-1 text-xs font-semibold ${item.isAvailable ? 'text-emerald-600' : 'text-red-600'}`}>{item.isAvailable ? 'Tersedia' : 'Tidak tersedia'}</p></div><button onClick={() => add(item)} disabled={!item.isAvailable} className={`min-h-11 rounded-xl px-4 text-sm font-bold transition ${!item.isAvailable ? 'cursor-not-allowed bg-slate-100 text-slate-400' : addedMap[item.id] ? 'bg-emerald-600 text-white' : 'bg-amber-500 text-slate-950 hover:bg-amber-400 active:scale-95'}`}>{addedMap[item.id] ? 'Ditambahkan' : 'Tambah'}</button></div>
+                <MenuImage src={item.imageUrl} alt={item.name} fallback={item.imageEmoji} className="aspect-square w-full sm:aspect-[4/3]" priority={index < 4} />
+                <div className="p-3 sm:p-4">
+                  <div className="flex items-start justify-between gap-3"><div><h3 className="line-clamp-2 text-sm font-bold leading-5 text-slate-950 sm:text-base">{item.name}</h3><p className="mt-1 line-clamp-2 min-h-9 text-xs leading-4 text-slate-500 sm:min-h-10 sm:text-sm sm:leading-5">{item.description || 'Menu pilihan cafe.'}</p></div></div>
+                  <div className="mt-3 flex flex-col gap-2 sm:mt-4 sm:flex-row sm:items-center sm:justify-between sm:gap-3"><div><p className="text-sm font-extrabold text-amber-700 sm:text-base">{formatRupiah(item.price)}</p><p className={`mt-1 text-[11px] font-semibold sm:text-xs ${item.isAvailable ? 'text-emerald-600' : 'text-red-600'}`}>{item.isAvailable ? 'Tersedia' : 'Tidak tersedia'}</p></div><button onClick={() => add(item)} disabled={!item.isAvailable} className={`min-h-10 rounded-xl px-3 text-xs font-bold transition sm:min-h-11 sm:px-4 sm:text-sm ${!item.isAvailable ? 'cursor-not-allowed bg-slate-100 text-slate-400' : addedMap[item.id] ? 'bg-emerald-600 text-white' : 'bg-amber-500 text-slate-950 hover:bg-amber-400 active:scale-95'}`}>{addedMap[item.id] ? 'Ditambahkan' : 'Tambah'}</button></div>
                 </div>
               </article>
             ))}
