@@ -2,6 +2,7 @@ import Link from 'next/link'
 import { Badge, DataTable, EmptyState, MetricCard, PageHeader, SectionCard, inputClass, primaryButton, secondaryButton } from '@/components/admin/UI'
 import { formatRupiah } from '@/lib/menu-data'
 import { prisma } from '@/lib/prisma'
+import { withDatabaseRetry } from '@/lib/db-retry'
 import type { PaymentMethod } from '@/types'
 
 const paymentMethods: PaymentMethod[] = ['CASH', 'QRIS', 'TRANSFER', 'DEBIT_EDC']
@@ -160,7 +161,7 @@ export default async function ReportsPage({ searchParams }: { searchParams: { fr
   }
 
   try {
-    const [orderToday, paidAll, pendingAll, today, week, month, year, filteredRevenue, breakdown, orders] = await Promise.all([
+    const [orderToday, paidAll, pendingAll, today, week, month, year, filteredRevenue, breakdown, orders] = await withDatabaseRetry(() => Promise.all([
       prisma.order.count({ where: { createdAt: { gte: startOfDay() } } }),
       prisma.order.count({ where: { paymentStatus: 'PAID' } }),
       prisma.order.count({ where: { paymentStatus: 'UNPAID' } }),
@@ -171,7 +172,7 @@ export default async function ReportsPage({ searchParams }: { searchParams: { fr
       aggregateRevenue({ paidAt: { gte: from, lte: to }, ...(method ? { paymentMethod: method } : {}) }),
       Promise.all(paymentMethods.map(async (item) => ({ method: item, ...(await aggregateRevenue({ paidAt: { gte: from, lte: to }, paymentMethod: item })) }))),
       prisma.order.findMany({ where: filter, orderBy: { paidAt: 'desc' }, take: 500 }),
-    ])
+    ]))
     reportData = { orderToday, paidAll, pendingAll, today, week, month, year, filteredRevenue, breakdown, orders }
   } catch (error) {
     console.warn('Failed to load reports', error)

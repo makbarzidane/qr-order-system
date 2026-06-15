@@ -1,5 +1,6 @@
 import { prisma } from '@/lib/prisma'
 import { MENU_ITEMS } from '@/lib/menu-data'
+import { isTransientDatabaseError } from '@/lib/db-retry'
 import type { Order, OrderItem, PaymentMethod } from '@/types'
 
 const HAS_DB = Boolean(process.env.DATABASE_URL)
@@ -8,8 +9,7 @@ const memOrders = new Map<string, Order>()
 const memQueueCounters = new Map<string, number>()
 
 function isDatabaseUnavailable(error: unknown) {
-  if (!(error instanceof Error)) return false
-  return error.message.includes("Can't reach database server") || error.name === 'PrismaClientInitializationError'
+  return isTransientDatabaseError(error)
 }
 
 function auditUserId(actor?: { id?: string }) {

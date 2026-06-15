@@ -2,6 +2,7 @@ import { getServerSession } from 'next-auth'
 import { NextRequest, NextResponse } from 'next/server'
 import { authOptions } from '@/lib/auth'
 import { prisma } from '@/lib/prisma'
+import { withDatabaseRetry } from '@/lib/db-retry'
 import type { PaymentMethod } from '@/types'
 
 const paymentMethods: PaymentMethod[] = ['CASH', 'QRIS', 'TRANSFER', 'DEBIT_EDC']
@@ -99,14 +100,14 @@ export async function GET(req: NextRequest) {
 
   let orders: Awaited<ReturnType<typeof prisma.order.findMany>>
   try {
-    orders = await prisma.order.findMany({
+    orders = await withDatabaseRetry(() => prisma.order.findMany({
       where: {
         paymentStatus: 'PAID',
         paidAt: { gte: from, lte: to },
         ...(paymentMethod ? { paymentMethod } : {}),
       },
       orderBy: { paidAt: 'desc' },
-    })
+    }))
   } catch {
     const csv = toCsv([['Error'], ['Database belum bisa dihubungi. Periksa DATABASE_URL/Neon lalu coba export ulang.']])
 
