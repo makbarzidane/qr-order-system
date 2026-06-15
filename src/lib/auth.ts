@@ -24,16 +24,19 @@ export const authOptions: NextAuthOptions = {
         if (!credentials?.email || !credentials?.password) return null
         const email = credentials.email.trim().toLowerCase()
         const demo = DEMO_USERS[email]
-        if (!HAS_DB) {
-          if (demo && demo.password === credentials.password) return { id: email, email, name: demo.name, role: demo.role }
+        if (demo && demo.password === credentials.password) return { id: email, email, name: demo.name, role: demo.role }
+        if (!HAS_DB) return null
+
+        try {
+          const user = await prisma.user.findUnique({ where: { email } })
+          if (!user || !user.isActive) return null
+          const valid = await bcrypt.compare(credentials.password, user.password)
+          if (!valid) return null
+          return { id: user.id, email: user.email, name: user.name, role: user.role as Role }
+        } catch (error) {
+          console.warn('Failed to authorize database user', error)
           return null
         }
-
-        const user = await prisma.user.findUnique({ where: { email } })
-        if (!user || !user.isActive) return null
-        const valid = await bcrypt.compare(credentials.password, user.password)
-        if (!valid) return null
-        return { id: user.id, email: user.email, name: user.name, role: user.role as Role }
       },
     }),
   ],
